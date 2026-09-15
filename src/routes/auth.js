@@ -1,31 +1,45 @@
 import express from 'express';
 import { asyncHandler } from '../middleware/errorHandler.js';
 import { logger } from '../utils/logger.js';
+import { authenticate } from '../middleware/auth.js';
+import { validate } from '../middleware/validation.js';
+import {
+  registerUser,
+  authenticateUser,
+  createLearnerProfile,
+  getLearnerProfile
+} from '../services/auth.js';
 
 const router = express.Router();
 
 /**
  * POST /api/auth/register
- * Create new user account
+ * Create new user account and learner profile
  */
-router.post('/register', asyncHandler(async (req, res) => {
-  const { email, password, role = 'learner' } = req.body;
+router.post('/register', validate('register'), asyncHandler(async (req, res) => {
+  const { email, password, firstName, lastName, age, gradeLevel } = req.body;
   
-  if (!email || !password) {
-    return res.status(400).json({ error: 'Email and password required' });
-  }
+  // Create user
+  const user = await registerUser(email, password, 'learner');
   
-  logger.info('📝 NEW USER REGISTRATION', { email, role });
+  // Create learner profile
+  const learnerProfile = await createLearnerProfile(
+    user.id,
+    firstName || null,
+    lastName || null,
+    age || null,
+    gradeLevel || null
+  );
   
-  // TODO: Implement registration logic
-  // - Validate email format
-  // - Hash password with bcrypt
-  // - Create user record
-  // - Return user and JWT token
+  logger.info('✅ Registration complete', { userId: user.id });
   
-  res.json({
-    status: 'implementation_pending',
-    message: 'Registration endpoint structure ready'
+  res.status(201).json({
+    user: {
+      id: user.id,
+      email: user.email,
+      role: user.role
+    },
+    learner: learnerProfile
   });
 }));
 
@@ -33,37 +47,52 @@ router.post('/register', asyncHandler(async (req, res) => {
  * POST /api/auth/login
  * Authenticate user and return JWT
  */
-router.post('/login', asyncHandler(async (req, res) => {
+router.post('/login', validate('login'), asyncHandler(async (req, res) => {
   const { email, password } = req.body;
   
-  if (!email || !password) {
-    return res.status(400).json({ error: 'Email and password required' });
-  }
+  const authResult = await authenticateUser(email, password);
   
-  logger.info('🔐 USER LOGIN ATTEMPT', { email });
+  // Get learner profile if exists
+  const learnerProfile = await getLearnerProfile(authResult.id);
   
-  // TODO: Implement login logic
-  // - Find user by email
-  // - Compare password with hash
-  // - Generate JWT token
-  // - Return token
+  logger.info('✅ Login successful', { userId: authResult.id });
   
   res.json({
-    status: 'implementation_pending',
-    message: 'Login endpoint structure ready'
+    user: {
+      id: authResult.id,
+      email: authResult.email,
+      role: authResult.role
+    },
+    learner: learnerProfile,
+    token: authResult.token
   });
 }));
 
 /**
  * POST /api/auth/logout
- * Invalidate JWT token
+ * Invalidate JWT token (client-side for now)
  */
-router.post('/logout', asyncHandler(async (req, res) => {
-  logger.info('🚪 USER LOGOUT');
+router.post('/logout', authenticate, asyncHandler(async (req, res) => {
+  logger.info('🚪 User logout', { userId: req.user.id });
+  
+  // TODO: Implement token blacklisting in future
   
   res.json({
     status: 'success',
     message: 'Logged out successfully'
+  });
+}));
+
+/**
+ * GET /api/auth/me
+ * Get current authenticated user
+ */
+router.get('/me', authenticate, asyncHandler(async (req, res) => {
+  const learnerProfile = await getLearnerProfile(req.user.id);
+  
+  res.json({
+    user: req.user,
+    learner: learnerProfile
   });
 }));
 

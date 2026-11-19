@@ -27,8 +27,7 @@ async function getAuthenticatedLearnerId(req) {
  * Get learner dashboard data
  */
 router.get('/dashboard', authenticate, asyncHandler(async (req, res) => {
-  const { learner_id } = req.query;
-  const learnerId = learner_id || req.user.id;
+  const learnerId = await getAuthenticatedLearnerId(req);
   
   logger.info('📊 Dashboard load', { learnerId });
   
@@ -154,10 +153,15 @@ router.post('/lesson/:lessonId/complete', authenticate, asyncHandler(async (req,
   // Get next recommendation
   const pool = getPool();
   const pathResult = await pool.query(
-    `SELECT lp.subject_id FROM learning_paths lp
-     JOIN progress p ON true
-     WHERE p.lesson_id = $1 LIMIT 1`,
-    [lessonId]
+    `SELECT DISTINCT lp.subject_id
+     FROM learning_paths lp
+     JOIN topics t ON t.subject_id = lp.subject_id
+     JOIN skills s ON s.topic_id = t.id
+     JOIN lessons l ON l.skill_id = s.id
+     WHERE l.id = $1 AND lp.learner_id = $2
+     ORDER BY lp.subject_id
+     LIMIT 1`,
+    [lessonId, learnerId]
   );
   
   const subjectId = pathResult.rows[0]?.subject_id;

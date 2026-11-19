@@ -50,4 +50,6 @@ test('removes answer keys and correctness flags from lesson content', () => {
   assert.equal(safe.questions[0].acceptedAnswers, undefined);
   assert.equal(safe.questions[0].options[1].isCorrect, undefined);
   assert.equal(source.questions[0].correctAnswer, '4');
+  const nested = sanitizeLessonContent({ sections: [{ questions: [{ id: 2, correctAnswer: 'secret' }] }] });
+  assert.equal(nested.sections[0].questions[0].correctAnswer, undefined);
 });

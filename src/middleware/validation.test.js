@@ -59,3 +59,24 @@ test('rejects unknown diagnostic fields and invalid topic IDs', () => {
   assert.equal(result.nextCalled, false);
   assert.equal(result.statusCode, 400);
 });
+
+test('allows arbitrary structured lesson content while validating its envelope', () => {
+  const result = runValidation('lesson', {
+    skillId: 1,
+    title: 'Fractions',
+    description: 'An introduction',
+    content: { sections: [{ title: 'Basics', questions: [{ id: 1, prompt: '1/2?' }] }] },
+    durationMinutes: 20
+  });
+  assert.equal(result.nextCalled, true);
+  assert.equal(result.req.body.content.sections[0].questions[0].prompt, '1/2?');
+});
+
+test('allows structured analytics metadata without accepting an invalid event type', () => {
+  const result = runValidation('analyticsEvent', {
+    eventType: 'lesson_opened',
+    data: { lessonId: 4, source: 'dashboard' }
+  });
+  assert.equal(result.nextCalled, true);
+  assert.equal(result.req.body.data.lessonId, 4);
+});

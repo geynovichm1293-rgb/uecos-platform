@@ -11,7 +11,7 @@ psql --set=ON_ERROR_STOP=1 \
   --set=app_password="$APP_DB_PASSWORD" \
   --set=app_db="$POSTGRES_DB" <<'SQL'
 CREATE ROLE :"app_user" LOGIN PASSWORD :'app_password';
-GRANT CONNECT ON DATABASE "uecos_dev" TO :"app_user";
+GRANT CONNECT ON DATABASE :"app_db" TO :"app_user";
 GRANT USAGE, CREATE ON SCHEMA public TO :"app_user";
 ALTER DEFAULT PRIVILEGES FOR ROLE :"app_user" IN SCHEMA public
   GRANT ALL PRIVILEGES ON TABLES TO :"app_user";

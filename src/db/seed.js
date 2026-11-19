@@ -14,15 +14,24 @@ async function seedDatabase() {
   try {
     logger.info('🌱 Seeding database...');
     
-    // Create test admin user
-    const adminPassword = await hashPassword('admin123');
-    await pool.query(
-      `INSERT INTO users (email, password_hash, role, status)
-       VALUES ($1, $2, $3, $4)
-       ON CONFLICT (email) DO NOTHING`,
-      ['admin@uecos.local', adminPassword, 'administrator', 'active']
-    );
-    logger.info('✅ Admin user created');
+    // Create an administrator only when explicitly configured.
+    const adminEmail = process.env.SEED_ADMIN_EMAIL?.trim().toLowerCase();
+    const adminPassword = process.env.SEED_ADMIN_PASSWORD;
+    if (adminEmail || adminPassword) {
+      if (!adminEmail || !adminPassword ||
+          Buffer.byteLength(adminPassword, 'utf8') < 8 ||
+          Buffer.byteLength(adminPassword, 'utf8') > 72) {
+        throw new Error('Set both SEED_ADMIN_EMAIL and an 8–72 byte SEED_ADMIN_PASSWORD to create a seed administrator.');
+      }
+      const passwordHash = await hashPassword(adminPassword);
+      await pool.query(
+        `INSERT INTO users (email, password_hash, role, status)
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT DO NOTHING`,
+        [adminEmail, passwordHash, 'administrator', 'active']
+      );
+      logger.info('Seed administrator ensured');
+    }
     
     // Create sample subjects
     const subjects = [

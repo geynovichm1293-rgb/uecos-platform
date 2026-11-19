@@ -55,6 +55,7 @@ async function runMigrations(pool) {
     createUsersTable,
     ensureUserTokenVersion,
     ensureCaseInsensitiveUserEmail,
+    createApiRateLimitsTable,
     createLearnersTable,
     createSubjectsTable,
     createTopicsTable,
@@ -111,6 +112,20 @@ async function ensureUserTokenVersion(pool) {
 async function ensureCaseInsensitiveUserEmail(pool) {
   await pool.query(
     'CREATE UNIQUE INDEX IF NOT EXISTS users_email_lower_unique_idx ON users (LOWER(email))'
+  );
+}
+
+
+async function createApiRateLimitsTable(pool) {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS api_rate_limits (
+      bucket_key CHAR(64) PRIMARY KEY,
+      window_started_at TIMESTAMPTZ NOT NULL,
+      request_count INTEGER NOT NULL CHECK (request_count > 0)
+    )
+  `);
+  await pool.query(
+    'CREATE INDEX IF NOT EXISTS api_rate_limits_window_started_idx ON api_rate_limits (window_started_at)'
   );
 }
 

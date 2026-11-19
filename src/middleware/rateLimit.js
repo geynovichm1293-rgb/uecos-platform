@@ -1,11 +1,15 @@
-import { createHash } from 'node:crypto';
+import { createHmac } from 'node:crypto';
 import { getPool } from '../db/init.js';
 import { logger } from '../utils/logger.js';
 
 let requestsSinceCleanup = 0;
 
 function hashBucketKey(value) {
-  return createHash('sha256').update(value).digest('hex');
+  const secret = process.env.RATE_LIMIT_HASH_SECRET || process.env.JWT_SECRET;
+  if (!secret || secret.length < 32) {
+    throw new Error('A 32-character RATE_LIMIT_HASH_SECRET or JWT_SECRET is required.');
+  }
+  return createHmac('sha256', secret).update(value).digest('hex');
 }
 
 /**

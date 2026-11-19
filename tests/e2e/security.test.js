@@ -81,7 +81,7 @@ test.describe('E2E: Security & Authorization', () => {
     learnerClient.defaults.headers.common['Authorization'] = `Bearer ${learnerLogin.data.token}`;
 
     const adminLogin = await client.post('/api/auth/login', {
-      email: 'admin@uecos.test',
+      email: 'admin@example.com',
       password: 'TestAdminPassword123!'
     });
     const adminClient = axios.create({ baseURL: API_BASE });

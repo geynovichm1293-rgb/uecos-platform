@@ -8,7 +8,12 @@ if (!JWT_SECRET || JWT_SECRET.length < 32) {
   throw new Error('JWT_SECRET must be configured with at least 32 characters before the server can start.');
 }
 const JWT_EXPIRY = process.env.JWT_EXPIRY || '24h';
-const BCRYPT_ROUNDS = parseInt(process.env.BCRYPT_ROUNDS) || 12;
+const BCRYPT_ROUNDS = process.env.BCRYPT_ROUNDS === undefined
+  ? 12
+  : Number(process.env.BCRYPT_ROUNDS);
+if (!Number.isInteger(BCRYPT_ROUNDS) || BCRYPT_ROUNDS < 10 || BCRYPT_ROUNDS > 14) {
+  throw new Error('BCRYPT_ROUNDS must be an integer between 10 and 14.');
+}
 
 /**
  * Hash password with bcrypt

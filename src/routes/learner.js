@@ -6,6 +6,8 @@ import { generateLearningPath, getLearningPath } from '../services/learningPath.
 import { getLesson, completeLesson, generateFeedback, updateProgress } from '../services/lesson.js';
 import { getLearnerProgress, getSkillProgress } from '../services/progress.js';
 import { getNextRecommendation } from '../services/recommendation.js';
+import { getLearnerProfile } from '../services/auth.js';
+import { getPool } from '../db/init.js';
 import { createDiagnosticAssessment, submitAssessment, getAssessment } from '../services/assessment.js';
 
 const router = express.Router();
@@ -15,13 +17,16 @@ const router = express.Router();
  * Get learner dashboard data
  */
 router.get('/dashboard', authenticate, asyncHandler(async (req, res) => {
-  const { learner_id } = req.query;
-  const learnerId = learner_id || req.user.id;
+  const learnerProfile = await getLearnerProfile(req.user.id);
+  if (!learnerProfile) {
+    return res.status(404).json({ error: 'Learner profile not found' });
+  }
+  const learnerId = learnerProfile.id;
   
   logger.info('📊 Dashboard load', { learnerId });
   
   // Get active learning paths
-  const pool = require('../db/init.js').getPool();
+  const pool = getPool();
   const pathsResult = await pool.query(
     'SELECT id, subject_id, goal, status FROM learning_paths WHERE learner_id = $1 AND status = $2 LIMIT 5',
     [learnerId, 'active']

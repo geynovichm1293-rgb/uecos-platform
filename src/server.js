@@ -1,4 +1,5 @@
 import express from 'express';
+import dotenv from 'dotenv';
 import { initializeDatabase } from './db/init.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { securityHeaders } from './middleware/securityHeaders.js';
@@ -8,16 +9,18 @@ import learnerRoutes from './routes/learner.js';
 import contentRoutes from './routes/content.js';
 import analyticsRoutes from './routes/analytics.js';
 
+dotenv.config();
 
 const app = express();
+app.disable('x-powered-by');
 const PORT = process.env.PORT || 3000;
 const NODE_ENV = process.env.NODE_ENV || 'development';
 
 // Security headers must run before routes so all responses receive them.
 app.use(securityHeaders);
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '1mb' }));
+app.use(express.urlencoded({ extended: true, limit: '1mb', parameterLimit: 100 }));
 
 // Request logging
 app.use((req, res, next) => {

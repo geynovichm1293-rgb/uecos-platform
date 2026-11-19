@@ -31,7 +31,7 @@ export function createToken(userId, role) {
   return jwt.sign(
     { userId, role, iat: Math.floor(Date.now() / 1000) },
     JWT_SECRET,
-    { expiresIn: JWT_EXPIRY }
+    { expiresIn: JWT_EXPIRY, algorithm: 'HS256' }
   );
 }
 
@@ -40,7 +40,7 @@ export function createToken(userId, role) {
  */
 export function verifyToken(token) {
   try {
-    return jwt.verify(token, JWT_SECRET);
+    return jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
   } catch (error) {
     logger.warn('Token verification failed', { error: error.message });
     return null;

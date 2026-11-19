@@ -64,15 +64,27 @@ async function runMigrations(pool) {
     createProgressTable,
     createAssessmentsTable
   ];
-  
-  for (const migration of migrations) {
-    try {
-      await migration(pool);
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    // Serialize startup migrations across multiple application instances.
+    await client.query('SELECT pg_advisory_xact_lock($1)', [78320415]);
+
+    for (const migration of migrations) {
+      await migration(client);
       logger.info(`Migration completed: ${migration.name}`);
-    } catch (error) {
-      logger.error(`Migration failed: ${migration.name}`, error);
-      throw error;
     }
+
+    await client.query('COMMIT');
+  } catch (error) {
+    try { await client.query('ROLLBACK'); } catch (rollbackError) {
+      logger.error('Migration rollback failed', { error: rollbackError.message });
+    }
+    logger.error('Database migration transaction failed', { error: error.message });
+    throw error;
+  } finally {
+    client.release();
   }
 }
 

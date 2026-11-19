@@ -3,6 +3,8 @@ import { asyncHandler } from '../middleware/errorHandler.js';
 import { validate } from '../middleware/validation.js';
 import { authenticate } from '../middleware/auth.js';
 import { logger } from '../utils/logger.js';
+import { getLearnerProfile } from '../services/auth.js';
+import { getPool } from '../db/init.js';
 import { generateLearningPath, getLearningPath } from '../services/learningPath.js';
 import { getLesson, completeLesson, evaluateLessonAnswer, updateProgress } from '../services/lesson.js';
 import { getLearnerProgress, getSkillProgress } from '../services/progress.js';
@@ -32,7 +34,7 @@ router.get('/dashboard', authenticate, asyncHandler(async (req, res) => {
   logger.info('📊 Dashboard load', { learnerId });
   
   // Get active learning paths
-  const pool = require('../db/init.js').getPool();
+  const pool = getPool();
   const pathsResult = await pool.query(
     'SELECT id, subject_id, goal, status FROM learning_paths WHERE learner_id = $1 AND status = $2 LIMIT 5',
     [learnerId, 'active']
@@ -137,7 +139,7 @@ router.post('/lesson/:lessonId/complete', authenticate, asyncHandler(async (req,
   await completeLesson(lessonId, learnerId);
   
   // Get next recommendation
-  const pool = require('../db/init.js').getPool();
+  const pool = getPool();
   const pathResult = await pool.query(
     `SELECT lp.subject_id FROM learning_paths lp
      JOIN progress p ON true

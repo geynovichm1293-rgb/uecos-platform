@@ -32,6 +32,8 @@ jobs:
         with:
           node-version: 20
       - run: npm install
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
       - name: Run database migrations
         env:
           DATABASE_URL: postgresql://uecos_user:uecos_test_password@localhost:5432/uecos_test

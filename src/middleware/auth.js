@@ -41,7 +41,7 @@ export async function authenticate(req, res, next) {
     next();
   } catch (error) {
     logger.warn('🚫 Authentication failed', { error: error.message });
-    res.status(error.status || 401).json({ error: error.message });
+    res.status(error.status || 401).json({ error: 'Authentication failed' });
   }
 }
 

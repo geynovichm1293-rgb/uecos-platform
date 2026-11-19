@@ -3,7 +3,10 @@ import jwt from 'jsonwebtoken';
 import { getPool } from '../db/init.js';
 import { logger } from '../utils/logger.js';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret_key';
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET || JWT_SECRET.length < 32) {
+  throw new Error('JWT_SECRET must be configured with at least 32 characters before the server can start.');
+}
 const JWT_EXPIRY = process.env.JWT_EXPIRY || '24h';
 const BCRYPT_ROUNDS = parseInt(process.env.BCRYPT_ROUNDS) || 12;
 
@@ -28,7 +31,7 @@ export function createToken(userId, role) {
   return jwt.sign(
     { userId, role, iat: Math.floor(Date.now() / 1000) },
     JWT_SECRET,
-    { expiresIn: JWT_EXPIRY }
+    { expiresIn: JWT_EXPIRY, algorithm: 'HS256' }
   );
 }
 
@@ -37,7 +40,7 @@ export function createToken(userId, role) {
  */
 export function verifyToken(token) {
   try {
-    return jwt.verify(token, JWT_SECRET);
+    return jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
   } catch (error) {
     logger.warn('Token verification failed', { error: error.message });
     return null;

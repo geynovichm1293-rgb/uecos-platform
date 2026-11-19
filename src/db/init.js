@@ -36,6 +36,7 @@ export async function initializeDatabase() {
 async function runMigrations(pool) {
   const migrations = [
     createUsersTable,
+    ensureUserTokenVersion,
     createLearnersTable,
     createSubjectsTable,
     createTopicsTable,
@@ -65,10 +66,16 @@ async function createUsersTable(pool) {
       password_hash VARCHAR(255) NOT NULL,
       role VARCHAR(50) NOT NULL DEFAULT 'learner',
       status VARCHAR(50) DEFAULT 'active',
+      token_version INTEGER NOT NULL DEFAULT 0,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
   `);
+}
+
+
+async function ensureUserTokenVersion(pool) {
+  await pool.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS token_version INTEGER NOT NULL DEFAULT 0');
 }
 
 async function createLearnersTable(pool) {

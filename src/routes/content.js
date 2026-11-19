@@ -42,7 +42,7 @@ router.get('/search', asyncHandler(async (req, res) => {
     return res.status(400).json({ error: 'Invalid search type' });
   }
   
-  logger.info('🔎 Content search', { query: q, type });
+  logger.info('Content search', { type, queryLength: q.trim().length });
   
   const pool = getPool();
   const searchTerm = `%${q.trim()}%`;

@@ -262,12 +262,12 @@ npm start                           # Start the API server
 - Learner ownership checks for dashboards, progress, assessments, and analytics
 - Server-side lesson and diagnostic-assessment grading; answer keys are removed from learner-facing responses
 - Request validation, 1 MiB body limits, and PostgreSQL-backed login/registration rate limits
-- Parameterized SQL, serialized/transactional migrations, and case-insensitive unique email addresses
+- Parameterized SQL, serialized/transactional migrations, case-insensitive unique email addresses, and a non-superuser application database role in Docker Compose
 - Baseline security headers and HSTS on HTTPS requests
 - HMAC-hashed rate-limit identifiers; raw IP/email values are not stored in the rate-limit table
 
 ### Configuration
-Never commit `.env`. Use `.env.example` as a template. Configure a random `JWT_SECRET` of at least 32 characters. If deployed behind a reverse proxy, set `TRUST_PROXY_HOPS` to the exact trusted proxy count; do not enable proxy trust blindly. Seed administrator credentials are optional and must be explicitly supplied through `SEED_ADMIN_EMAIL` and `SEED_ADMIN_PASSWORD`; there is no hard-coded default admin.
+Never commit `.env`. Use `.env.example` as a template. Docker Compose creates a separate PostgreSQL administrator and non-superuser application role; the API connects as `APP_DB_USER`, not the database administrator. Configure distinct strong `POSTGRES_ADMIN_PASSWORD` and `APP_DB_PASSWORD` values, plus a random `JWT_SECRET` of at least 32 characters. If deployed behind a reverse proxy, set `TRUST_PROXY_HOPS` to the exact trusted proxy count; do not enable proxy trust blindly. Seed administrator credentials are optional and must be explicitly supplied through `SEED_ADMIN_EMAIL` and `SEED_ADMIN_PASSWORD`; there is no hard-coded default admin.
 
 ### Not yet production-ready
 - Parental consent, age assurance, and privacy/legal review for a platform intended for children and schools

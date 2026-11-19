@@ -1,1 +1,18 @@
-FROM node:18-alpine\n\nWORKDIR /app\n\n# Copy package files\nCOPY package*.json ./\n\n# Install dependencies\nRUN npm install --omit=dev\n\n# Copy source code\nCOPY src/ ./src/\n\n# Expose port\nEXPOSE 3000\n\n# Health check\nHEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \\\n  CMD node -e \"require('http').get('http://localhost:3000/health', (r) => {if (r.statusCode !== 200) throw new Error(r.statusCode)})\"\n\n# Start application\nCMD [\"node\", \"src/server.js\"]\n
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Copy package manifest and install production dependencies.
+COPY package*.json ./
+RUN npm install --omit=dev
+
+# Copy application source.
+COPY src/ ./src/
+
+ENV NODE_ENV=production
+EXPOSE 3000
+
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
+  CMD node -e "require('http').get('http://127.0.0.1:3000/health', (r) => { if (r.statusCode !== 200) process.exit(1); }).on('error', () => process.exit(1))"
+
+CMD ["node", "src/server.js"]

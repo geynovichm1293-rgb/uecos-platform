@@ -25,3 +25,13 @@ test('securityHeaders sets restrictive headers and continues the request', () =>
   );
   assert.equal(nextCalled, true);
 });
+
+test('adds HSTS only when the request is secure', () => {
+  const secureRes = createResponse();
+  securityHeaders({ secure: true }, secureRes, () => {});
+  assert.equal(secureRes.headers['Strict-Transport-Security'], 'max-age=31536000; includeSubDomains');
+
+  const plainRes = createResponse();
+  securityHeaders({ secure: false }, plainRes, () => {});
+  assert.equal(plainRes.headers['Strict-Transport-Security'], undefined);
+});

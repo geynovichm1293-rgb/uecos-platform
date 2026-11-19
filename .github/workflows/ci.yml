@@ -28,6 +28,11 @@ jobs:
           --health-retries 5
     steps:
       - uses: actions/checkout@v4
+      - name: Validate Docker Compose configuration
+        env:
+          POSTGRES_PASSWORD: ci-compose-password-only
+          JWT_SECRET: test-only-secret-for-ci-at-least-32-characters
+        run: docker compose config --quiet
       - uses: actions/setup-node@v4
         with:
           node-version: 20

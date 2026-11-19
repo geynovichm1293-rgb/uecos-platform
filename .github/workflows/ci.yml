@@ -48,6 +48,8 @@ jobs:
           DATABASE_URL: postgresql://uecos_user:uecos_test_password@localhost:5432/uecos_test
           JWT_SECRET: test-only-secret-for-ci-at-least-32-characters
           NODE_ENV: test
+          SEED_ADMIN_EMAIL: admin@uecos.test
+          SEED_ADMIN_PASSWORD: TestAdminPassword123!
         run: npm run seed
       - name: Start API server
         env:

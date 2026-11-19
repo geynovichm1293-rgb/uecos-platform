@@ -4,9 +4,7 @@ import { logger } from '../utils/logger.js';
 import { authenticate } from '../middleware/auth.js';
 import { validate } from '../middleware/validation.js';
 import {
-  registerUser,
   authenticateUser,
-  createLearnerProfile,
   getLearnerProfile,
   revokeUserTokens
 } from '../services/auth.js';
@@ -20,17 +18,9 @@ const router = express.Router();
 router.post('/register', validate('register'), asyncHandler(async (req, res) => {
   const { email, password, firstName, lastName, age, gradeLevel } = req.body;
   
-  // Create user
-  const user = await registerUser(email, password, 'learner');
-  
-  // Create learner profile
-  const learnerProfile = await createLearnerProfile(
-    user.id,
-    firstName || null,
-    lastName || null,
-    age || null,
-    gradeLevel || null
-  );
+  const { user, learner: learnerProfile } = await registerLearnerAccount(email, password, {
+    firstName, lastName, age, gradeLevel
+  });
   
   logger.info('✅ Registration complete', { userId: user.id });
   

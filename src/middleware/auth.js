@@ -25,7 +25,7 @@ export async function authenticate(req, res, next) {
     // Get user details
     const user = await getUserById(payload.userId);
     
-    if (!user || user.status !== 'active') {
+    if (!user || user.status !== 'active' || (payload.tokenVersion ?? 0) !== Number(user.token_version ?? 0)) {
       const error = new Error('User not found or inactive');
       error.status = 401;
       throw error;

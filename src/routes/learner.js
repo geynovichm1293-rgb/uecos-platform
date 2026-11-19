@@ -9,7 +9,7 @@ import { generateLearningPath, getLearningPath } from '../services/learningPath.
 import { getLesson, completeLesson, evaluateLessonAnswer, updateProgress } from '../services/lesson.js';
 import { getLearnerProgress, getSkillProgress } from '../services/progress.js';
 import { getNextRecommendation } from '../services/recommendation.js';
-import { createDiagnosticAssessment, submitAssessment, getAssessment } from '../services/assessment.js';
+import { createDiagnosticAssessment, submitAssessment, sanitizeAssessmentQuestions } from '../services/assessment.js';
 
 const router = express.Router();
 
@@ -180,7 +180,7 @@ router.get('/progress', authenticate, asyncHandler(async (req, res) => {
  * POST /api/learner/assessment/diagnostic
  * Start diagnostic assessment
  */
-router.post('/assessment/diagnostic', authenticate, asyncHandler(async (req, res) => {
+router.post('/assessment/diagnostic', authenticate, validate('diagnostic'), asyncHandler(async (req, res) => {
   const { topicId } = req.body;
   const learnerId = await getAuthenticatedLearnerId(req);
   
@@ -188,15 +188,15 @@ router.post('/assessment/diagnostic', authenticate, asyncHandler(async (req, res
   
   // Create sample diagnostic questions
   const diagnosticQuestions = [
-    { id: 1, text: 'Sample diagnostic question 1', explanation: 'Learn more here' },
-    { id: 2, text: 'Sample diagnostic question 2', explanation: 'Learn more here' }
+    { id: 1, text: 'What is 2 + 2?', correctAnswer: '4', explanation: '2 + 2 equals 4.' },
+    { id: 2, text: 'What is half of 10?', correctAnswer: '5', explanation: 'Half means divide by 2; 10 divided by 2 equals 5.' }
   ];
   
   const assessment = await createDiagnosticAssessment(learnerId, topicId, diagnosticQuestions);
   
   res.status(201).json({
     assessmentId: assessment.id,
-    questions: assessment.questions,
+    questions: sanitizeAssessmentQuestions(assessment.questions),
     message: 'Answer these questions to determine your starting point'
   });
 }));
@@ -205,7 +205,7 @@ router.post('/assessment/diagnostic', authenticate, asyncHandler(async (req, res
  * POST /api/learner/assessment/:assessmentId/submit
  * Submit diagnostic assessment
  */
-router.post('/assessment/:assessmentId/submit', authenticate, asyncHandler(async (req, res) => {
+router.post('/assessment/:assessmentId/submit', authenticate, validate('assessmentResponses'), asyncHandler(async (req, res) => {
   const { assessmentId } = req.params;
   const { responses } = req.body;
   const learnerId = await getAuthenticatedLearnerId(req);

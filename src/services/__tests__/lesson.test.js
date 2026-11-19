@@ -1,5 +1,5 @@
 import assert from 'assert';
-import { generateFeedback } from '../services/lesson.js';
+import { generateFeedback } from '../lesson.js';
 
 const test = await import('node:test');
 

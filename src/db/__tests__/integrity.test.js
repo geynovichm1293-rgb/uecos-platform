@@ -1,5 +1,5 @@
 import assert from 'assert';
-import { getPool } from '../db/init.js';
+import { getPool } from '../init.js';
 
 const test = await import('node:test');
 

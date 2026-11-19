@@ -1,5 +1,6 @@
 import assert from 'assert';
-import { hashPassword, comparePassword, createToken, verifyToken } from '../services/auth.js';
+process.env.JWT_SECRET ||= 'test-only-secret-for-automated-tests-at-least-32-chars';
+const { hashPassword, comparePassword, createToken, verifyToken } = await import('../auth.js');
 
 const test = await import('node:test');
 

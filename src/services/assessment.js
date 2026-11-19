@@ -26,7 +26,7 @@ export async function createDiagnosticAssessment(learnerId, topicId, questions) 
 /**
  * Submit assessment responses
  */
-export async function submitAssessment(assessmentId, responses) {
+export async function submitAssessment(assessmentId, learnerId, responses) {
   const pool = getPool();
   
   try {
@@ -36,12 +36,17 @@ export async function submitAssessment(assessmentId, responses) {
     const result = await pool.query(
       `UPDATE assessments 
        SET responses = $1, score = $2, status = $3, completed_at = CURRENT_TIMESTAMP
-       WHERE id = $4
+       WHERE id = $4 AND learner_id = $5 AND status = 'in_progress'
        RETURNING *`,
-      [JSON.stringify(responses), score, 'completed', assessmentId]
+      [JSON.stringify(responses), score, 'completed', assessmentId, learnerId]
     );
     
-    logger.info('✅ Assessment submitted', { assessmentId, score });
+    if (result.rows.length === 0) {
+      const error = new Error('Assessment not found or not available to this learner');
+      error.status = 404;
+      throw error;
+    }
+    logger.info('✅ Assessment submitted', { assessmentId, learnerId, score });
     return result.rows[0];
   } catch (error) {
     logger.error('❌ Assessment submission failed', { error: error.message });

@@ -7,10 +7,24 @@ let pool = null;
 
 export function getPool() {
   if (!pool) {
-    pool = new Pool({
-      connectionString: process.env.DATABASE_URL,
-      max: parseInt(process.env.DATABASE_POOL_SIZE) || 10
-    });
+    const configuredPoolSize = process.env.DATABASE_POOL_SIZE === undefined
+      ? 10
+      : Number(process.env.DATABASE_POOL_SIZE);
+    if (!Number.isInteger(configuredPoolSize) || configuredPoolSize < 1 || configuredPoolSize > 50) {
+      throw new Error('DATABASE_POOL_SIZE must be an integer between 1 and 50.');
+    }
+
+    const config = { max: configuredPoolSize };
+    if (process.env.DATABASE_URL) {
+      config.connectionString = process.env.DATABASE_URL;
+    } else {
+      config.host = process.env.PGHOST;
+      config.port = Number(process.env.PGPORT) || 5432;
+      config.user = process.env.PGUSER;
+      config.password = process.env.PGPASSWORD;
+      config.database = process.env.PGDATABASE;
+    }
+    pool = new Pool(config);
   }
   return pool;
 }
@@ -20,11 +34,14 @@ export async function initializeDatabase() {
   
   try {
     const client = await pool.connect();
-    const version = await client.query('SELECT version();');
-    logger.info('Database connection established');
-    logger.info('PostgreSQL version:', { version: version.rows[0].version });
-    client.release();
-    
+    try {
+      const version = await client.query('SELECT version();');
+      logger.info('Database connection established');
+      logger.info('PostgreSQL version:', { version: version.rows[0].version });
+    } finally {
+      client.release();
+    }
+
     // Run migrations
     await runMigrations(pool);
   } catch (error) {

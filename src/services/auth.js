@@ -76,11 +76,11 @@ export async function registerUser(email, password, role = 'learner') {
     );
     
     const user = result.rows[0];
-    logger.info('✅ User registered successfully', { userId: user.id, email: user.email });
+    logger.info('User registered successfully', { userId: user.id });
     
     return user;
   } catch (error) {
-    logger.error('❌ User registration failed', { email, error: error.message });
+    logger.error('User registration failed', { error: error.message });
     throw error;
   }
 }
@@ -118,7 +118,7 @@ export async function authenticateUser(email, password) {
     // Generate token
     const token = createToken(user.id, user.role, user.token_version ?? 0);
     
-    logger.info('🔐 User authenticated successfully', { userId: user.id, email: user.email });
+    logger.info('User authenticated successfully', { userId: user.id });
     
     return {
       id: user.id,
@@ -127,7 +127,7 @@ export async function authenticateUser(email, password) {
       token
     };
   } catch (error) {
-    logger.error('❌ Authentication failed', { email, error: error.message });
+    logger.error('Authentication failed', { error: error.message });
     throw error;
   }
 }
@@ -193,4 +193,48 @@ export async function revokeUserTokens(userId) {
     [userId]
   );
   return result.rows[0]?.token_version ?? null;
+}
+
+/**
+ * Atomically create a learner account and profile.
+ * Duplicate-email races are mapped to a safe 409 response.
+ */
+export async function registerLearnerAccount(email, password, profile = {}) {
+  const pool = getPool();
+  const passwordHash = await hashPassword(password);
+  const client = await pool.connect();
+
+  try {
+    await client.query('BEGIN');
+    const userResult = await client.query(
+      'INSERT INTO users (email, password_hash, role, status) VALUES ($1, $2, $3, $4) RETURNING id, email, role',
+      [email, passwordHash, 'learner', 'active']
+    );
+    const user = userResult.rows[0];
+
+    const learnerResult = await client.query(
+      `INSERT INTO learners (user_id, first_name, last_name, age, grade_level, learning_preferences, accessibility_settings)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       RETURNING id, user_id, first_name, last_name, age, grade_level`,
+      [user.id, profile.firstName ?? null, profile.lastName ?? null,
+       profile.age ?? null, profile.gradeLevel ?? null, '{}', '{}']
+    );
+
+    await client.query('COMMIT');
+    logger.info('Learner account registered atomically', { userId: user.id });
+    return { user, learner: learnerResult.rows[0] };
+  } catch (error) {
+    try { await client.query('ROLLBACK'); } catch (rollbackError) {
+      logger.error('Registration rollback failed', { error: rollbackError.message });
+    }
+    if (error.code === '23505') {
+      const conflict = new Error('User with this email already exists');
+      conflict.status = 409;
+      throw conflict;
+    }
+    logger.error('Atomic registration failed', { error: error.message });
+    throw error;
+  } finally {
+    client.release();
+  }
 }

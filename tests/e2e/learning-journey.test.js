@@ -19,6 +19,9 @@ let testUser = {
 
 let authToken = null;
 let userId = null;
+let subjectId = null;
+let topicId = null;
+let assessmentId = null;
 
 const test = await import('node:test');
 
@@ -57,12 +60,16 @@ test.describe('E2E: Complete Learning Journey', () => {
     
     assert.strictEqual(response.status, 200, 'Subjects endpoint should return 200');
     assert.ok(Array.isArray(response.data.subjects), 'Should return array of subjects');
+    assert.ok(response.data.subjects.length > 0, 'Seeded subjects should be available');
+    subjectId = response.data.subjects[0].id;
+    const topicResponse = await client.get('/api/content/search?q=Arithmetic&type=topic');
+    assert.ok(topicResponse.data.topics.length > 0, 'Seeded math topic should be searchable');
+    topicId = topicResponse.data.topics[0].id;
   });
   
   test.it('Step 4: User sets learning goal', async () => {
-    // Assuming a subject with ID 1 exists
     const response = await client.post('/api/learner/goal', {
-      subjectId: 1,
+      subjectId,
       goalDescription: 'Learn basic math'
     });
     
@@ -79,24 +86,62 @@ test.describe('E2E: Complete Learning Journey', () => {
   });
   
   test.it('Step 6: User cannot access other user\'s data', async () => {
+    const ownProgress = await client.get('/api/learner/progress');
+    const attemptedOverride = await client.get('/api/learner/progress?learner_id=99999');
+    assert.deepStrictEqual(
+      attemptedOverride.data,
+      ownProgress.data,
+      'A caller-supplied learner_id must not change which learner record is returned'
+    );
+  });
+  
+  test.it('Step 7: Diagnostic questions do not reveal answer keys', async () => {
+    const response = await client.post('/api/learner/assessment/diagnostic', { topicId });
+    assert.strictEqual(response.status, 201);
+    assessmentId = response.data.assessmentId;
+    assert.equal(response.data.questions[0].correctAnswer, undefined);
+    assert.equal(response.data.questions[1].correctAnswer, undefined);
+  });
+
+  test.it('Step 8: Diagnostic scoring ignores client correctness flags', async () => {
+    const response = await client.post(`/api/learner/assessment/${assessmentId}/submit`, {
+      responses: [
+        { questionId: 1, answer: '3', isCorrect: true },
+        { questionId: 2, answer: '5', isCorrect: false }
+      ]
+    });
+    assert.equal(response.status, 200);
+    assert.equal(response.data.score, 50);
+  });
+
+  test.it('Step 9: Completed assessments cannot be submitted again', async () => {
     try {
-      await client.get('/api/learner/progress?learner_id=99999');
-      assert.fail('Should not allow access to other user data');
+      await client.post(`/api/learner/assessment/${assessmentId}/submit`, {
+        responses: [
+          { questionId: 1, answer: '4' },
+          { questionId: 2, answer: '5' }
+        ]
+      });
+      assert.fail('A completed assessment must not be resubmittable');
     } catch (error) {
-      assert.strictEqual(error.response.status, 403, 'Should return 403 Forbidden');
+      assert.equal(error.response.status, 404);
     }
   });
-  
-  test.it('Step 7: Logout clears token', async () => {
+
+  test.it('Step 10: Logout revokes the existing token', async () => {
     const response = await client.post('/api/auth/logout');
-    
     assert.strictEqual(response.status, 200, 'Logout should return 200');
-    
-    // Remove token for next requests
+
+    try {
+      await client.get('/api/auth/me');
+      assert.fail('The old access token must stop working immediately after logout');
+    } catch (error) {
+      assert.equal(error.response.status, 401);
+    }
     delete client.defaults.headers.common['Authorization'];
   });
-  
-  test.it('Step 8: Subsequent requests without token fail', async () => {
+
+  test.it('Step 11: Subsequent requests without token fail', async () => {
     try {
       await client.get('/api/learner/dashboard');
       assert.fail('Should not allow unauthenticated access');

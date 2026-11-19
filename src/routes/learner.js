@@ -10,6 +10,16 @@ import { createDiagnosticAssessment, submitAssessment, getAssessment } from '../
 
 const router = express.Router();
 
+async function getAuthenticatedLearnerId(req) {
+  const learnerProfile = await getLearnerProfile(req.user.id);
+  if (!learnerProfile) {
+    const error = new Error('Learner profile not found');
+    error.status = 404;
+    throw error;
+  }
+  return learnerProfile.id;
+}
+
 /**
  * GET /api/learner/dashboard
  * Get learner dashboard data
@@ -41,7 +51,7 @@ router.get('/dashboard', authenticate, asyncHandler(async (req, res) => {
  */
 router.post('/goal', authenticate, asyncHandler(async (req, res) => {
   const { subjectId, goalDescription } = req.body;
-  const learnerId = req.user.id;
+  const learnerId = await getAuthenticatedLearnerId(req);
   
   logger.info('🎯 Goal selection', { learnerId, subjectId, goalDescription });
   
@@ -62,7 +72,7 @@ router.post('/goal', authenticate, asyncHandler(async (req, res) => {
  */
 router.get('/path/:pathId', authenticate, asyncHandler(async (req, res) => {
   const { pathId } = req.params;
-  const learnerId = req.user.id;
+  const learnerId = await getAuthenticatedLearnerId(req);
   
   logger.info('📋 Path view', { pathId, learnerId });
   
@@ -82,7 +92,7 @@ router.get('/path/:pathId', authenticate, asyncHandler(async (req, res) => {
  */
 router.get('/lesson/:lessonId', authenticate, asyncHandler(async (req, res) => {
   const { lessonId } = req.params;
-  const learnerId = req.user.id;
+  const learnerId = await getAuthenticatedLearnerId(req);
   
   logger.info('📖 Lesson view', { lessonId, learnerId });
   
@@ -98,7 +108,7 @@ router.get('/lesson/:lessonId', authenticate, asyncHandler(async (req, res) => {
 router.post('/lesson/:lessonId/answer', authenticate, asyncHandler(async (req, res) => {
   const { lessonId } = req.params;
   const { questionId, answer, correctAnswer } = req.body;
-  const learnerId = req.user.id;
+  const learnerId = await getAuthenticatedLearnerId(req);
   
   logger.info('✏️ Answer submission', { lessonId, learnerId });
   
@@ -133,7 +143,7 @@ router.post('/lesson/:lessonId/answer', authenticate, asyncHandler(async (req, r
  */
 router.post('/lesson/:lessonId/complete', authenticate, asyncHandler(async (req, res) => {
   const { lessonId } = req.params;
-  const learnerId = req.user.id;
+  const learnerId = await getAuthenticatedLearnerId(req);
   
   logger.info('✅ Lesson completion', { lessonId, learnerId });
   
@@ -164,7 +174,7 @@ router.post('/lesson/:lessonId/complete', authenticate, asyncHandler(async (req,
  */
 router.get('/progress', authenticate, asyncHandler(async (req, res) => {
   const { subjectId } = req.query;
-  const learnerId = req.user.id;
+  const learnerId = await getAuthenticatedLearnerId(req);
   
   logger.info('📈 Progress fetch', { learnerId });
   
@@ -183,7 +193,7 @@ router.get('/progress', authenticate, asyncHandler(async (req, res) => {
  */
 router.post('/assessment/diagnostic', authenticate, asyncHandler(async (req, res) => {
   const { topicId } = req.body;
-  const learnerId = req.user.id;
+  const learnerId = await getAuthenticatedLearnerId(req);
   
   logger.info('📋 Diagnostic assessment started', { learnerId, topicId });
   
@@ -209,11 +219,11 @@ router.post('/assessment/diagnostic', authenticate, asyncHandler(async (req, res
 router.post('/assessment/:assessmentId/submit', authenticate, asyncHandler(async (req, res) => {
   const { assessmentId } = req.params;
   const { responses } = req.body;
-  const learnerId = req.user.id;
+  const learnerId = await getAuthenticatedLearnerId(req);
   
   logger.info('📋 Diagnostic assessment submitted', { learnerId, assessmentId });
   
-  const assessment = await submitAssessment(assessmentId, responses);
+  const assessment = await submitAssessment(assessmentId, learnerId, responses);
   
   res.json({
     assessmentId: assessment.id,

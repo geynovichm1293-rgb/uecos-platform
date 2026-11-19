@@ -181,3 +181,44 @@ export async function getLearnerProfile(userId) {
   
   return result.rows[0] || null;
 }
+
+
+/**
+ * Atomically create a user account and its learner profile.
+ * Either both records are committed or neither record is persisted.
+ */
+export async function registerLearnerAccount(email, password, profile = {}) {
+  const pool = getPool();
+  const passwordHash = await hashPassword(password);
+  const client = await pool.connect();
+
+  try {
+    await client.query('BEGIN');
+
+    const userResult = await client.query(
+      'INSERT INTO users (email, password_hash, role, status) VALUES ($1, $2, $3, $4) RETURNING id, email, role',
+      [email, passwordHash, 'learner', 'active']
+    );
+    const user = userResult.rows[0];
+
+    const learnerResult = await client.query(
+      `INSERT INTO learners (user_id, first_name, last_name, age, grade_level, learning_preferences, accessibility_settings)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       RETURNING id, user_id, first_name, last_name, age, grade_level`,
+      [user.id, profile.firstName ?? null, profile.lastName ?? null,
+       profile.age ?? null, profile.gradeLevel ?? null, '{}', '{}']
+    );
+
+    await client.query('COMMIT');
+    logger.info('User and learner profile registered atomically', { userId: user.id });
+    return { user, learner: learnerResult.rows[0] };
+  } catch (error) {
+    try { await client.query('ROLLBACK'); } catch (rollbackError) {
+      logger.error('Registration rollback failed', { error: rollbackError.message });
+    }
+    logger.error('Atomic registration failed', { email, error: error.message });
+    throw error;
+  } finally {
+    client.release();
+  }
+}

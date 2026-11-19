@@ -1,6 +1,5 @@
 import bcryptjs from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { randomUUID } from 'node:crypto';
 import { getPool } from '../db/init.js';
 import { logger } from '../utils/logger.js';
 
@@ -30,7 +29,7 @@ export async function comparePassword(password, hash) {
  */
 export function createToken(userId, role, tokenVersion = 0) {
   return jwt.sign(
-    { userId, role, tokenVersion, jti: randomUUID(), iat: Math.floor(Date.now() / 1000) },
+    { userId, role, tokenVersion, iat: Math.floor(Date.now() / 1000) },
     JWT_SECRET,
     { expiresIn: JWT_EXPIRY, algorithm: 'HS256' }
   );

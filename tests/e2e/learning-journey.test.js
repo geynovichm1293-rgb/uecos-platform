@@ -40,6 +40,18 @@ test.describe('E2E: Complete Learning Journey', () => {
     
     userId = response.data.user.id;
   });
+
+  test.it('Step 1b: Email uniqueness is case-insensitive', async () => {
+    try {
+      await client.post('/api/auth/register', {
+        email: testUser.email.toUpperCase(),
+        password: testUser.password
+      });
+      assert.fail('A case-variant duplicate email must not create another account');
+    } catch (error) {
+      assert.equal(error.response.status, 409);
+    }
+  });
   
   test.it('Step 2: User logs in successfully', async () => {
     const response = await client.post('/api/auth/login', {

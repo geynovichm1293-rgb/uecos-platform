@@ -32,7 +32,7 @@ const schemas = {
     responses: Joi.array().items(Joi.object({
       questionId: Joi.number().integer().required(),
       answer: Joi.alternatives().try(Joi.string().max(5000), Joi.number(), Joi.boolean()).required()
-    }).unknown(false)).min(1).max(100).required()
+    })).min(1).max(100).required()
   })
 };
 

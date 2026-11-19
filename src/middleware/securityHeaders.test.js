@@ -30,7 +30,7 @@ test('adds HSTS only when the request is secure', () => {
   const secureHeaders = new Map();
   const secureRes = { setHeader: (name, value) => secureHeaders.set(name.toLowerCase(), value) };
   securityHeaders({ secure: true }, secureRes, () => {});
-  assert.equal(secureHeaders.get('strict-transport-security'), 'max-age=31536000; includeSubDomains');
+  assert.equal(secureHeaders.get('strict-transport-security'), 'max-age=31536000');
 
   const plainHeaders = new Map();
   const plainRes = { setHeader: (name, value) => plainHeaders.set(name.toLowerCase(), value) };

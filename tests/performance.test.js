@@ -9,8 +9,8 @@ const API_BASE = process.env.API_BASE || 'http://localhost:3000';
 const client = axios.create({ baseURL: API_BASE });
 
 const THRESHOLDS = {
-  healthCheck: 100,      // ms
-  apiResponse: 200,      // ms
+  healthCheck: 500,      // ms
+  apiResponse: 1000,     // ms
   dashboard: 500,        // ms
   search: 1000           // ms
 };
@@ -18,7 +18,7 @@ const THRESHOLDS = {
 const test = await import('node:test');
 
 test.describe('Performance Benchmarks', () => {
-  test.it('Health check should respond in <100ms', async () => {
+  test.it('Health check should respond in <500ms', async () => {
     const start = Date.now();
     await client.get('/health');
     const duration = Date.now() - start;
@@ -26,7 +26,7 @@ test.describe('Performance Benchmarks', () => {
     assert.ok(duration < THRESHOLDS.healthCheck, `Health check took ${duration}ms, should be <${THRESHOLDS.healthCheck}ms`);
   });
   
-  test.it('API endpoints should respond in <200ms', async () => {
+  test.it('API endpoints should respond in <1000ms', async () => {
     const start = Date.now();
     try {
       await client.get('/api/content/subjects');

@@ -7,7 +7,8 @@ import {
   registerUser,
   authenticateUser,
   createLearnerProfile,
-  getLearnerProfile
+  getLearnerProfile,
+  revokeUserTokens
 } from '../services/auth.js';
 
 const router = express.Router();
@@ -75,7 +76,7 @@ router.post('/login', validate('login'), asyncHandler(async (req, res) => {
 router.post('/logout', authenticate, asyncHandler(async (req, res) => {
   logger.info('🚪 User logout', { userId: req.user.id });
   
-  // TODO: Implement token blacklisting in future
+  await revokeUserTokens(req.user.id);
   
   res.json({
     status: 'success',

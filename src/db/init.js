@@ -37,6 +37,7 @@ async function runMigrations(pool) {
   const migrations = [
     createUsersTable,
     ensureUserTokenVersion,
+    ensureCaseInsensitiveUserEmail,
     createLearnersTable,
     createSubjectsTable,
     createTopicsTable,
@@ -76,6 +77,13 @@ async function createUsersTable(pool) {
 
 async function ensureUserTokenVersion(pool) {
   await pool.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS token_version INTEGER NOT NULL DEFAULT 0');
+}
+
+
+async function ensureCaseInsensitiveUserEmail(pool) {
+  await pool.query(
+    'CREATE UNIQUE INDEX IF NOT EXISTS users_email_lower_unique_idx ON users (LOWER(email))'
+  );
 }
 
 async function createLearnersTable(pool) {

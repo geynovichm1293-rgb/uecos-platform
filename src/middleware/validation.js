@@ -54,6 +54,10 @@ const schemas = {
     content: Joi.object().required(),
     durationMinutes: Joi.number().integer().min(1).max(600).required()
   }),
+  analyticsEvent: Joi.object({
+    eventType: Joi.string().trim().min(1).max(100).required(),
+    data: Joi.object().optional()
+  }),
   lessonUpdate: Joi.object({
     title: Joi.string().trim().min(2).max(255),
     description: Joi.string().max(5000).allow('', null),

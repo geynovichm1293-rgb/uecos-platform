@@ -36,11 +36,30 @@ jobs:
         env:
           DATABASE_URL: postgresql://uecos_user:uecos_test_password@localhost:5432/uecos_test
         run: npm run migrate
+      - name: Start API server
+        env:
+          DATABASE_URL: postgresql://uecos_user:uecos_test_password@localhost:5432/uecos_test
+          JWT_SECRET: test-only-secret-for-ci-at-least-32-characters
+          NODE_ENV: test
+          PORT: 3000
+        run: |
+          npm start > /tmp/uecos-server.log 2>&1 &
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:3000/health > /dev/null; then
+              echo "API server is ready"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "API server failed to become ready"
+          cat /tmp/uecos-server.log
+          exit 1
       - name: Run test suite
         env:
           DATABASE_URL: postgresql://uecos_user:uecos_test_password@localhost:5432/uecos_test
           JWT_SECRET: test-only-secret-for-ci-at-least-32-characters
           NODE_ENV: test
+          API_BASE: http://127.0.0.1:3000
         run: npm test
 
   docker-build:

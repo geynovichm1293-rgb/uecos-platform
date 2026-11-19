@@ -138,32 +138,30 @@ export async function evaluateLessonAnswer(lessonId, questionId, submittedAnswer
 
 /** Remove answer keys from question objects before sending lesson content to clients. */
 export function sanitizeLessonContent(content) {
-  if (!content || typeof content !== 'object' || Array.isArray(content)) return content;
-  const safe = { ...content };
-  if (Array.isArray(content.questions)) {
-    safe.questions = content.questions.map(question => {
-      if (!question || typeof question !== 'object') return question;
-      const {
-        correctAnswer,
-        correctOptionId,
-        answerKey,
-        acceptedAnswers,
-        isCorrect,
-        ...publicQuestion
-      } = question;
-      if (Array.isArray(question.options)) {
-        publicQuestion.options = question.options.map(option => {
-          if (!option || typeof option !== 'object') return option;
-          const { isCorrect: _isCorrect, correct: _correct, ...publicOption } = option;
-          return publicOption;
-        });
-      }
-      return publicQuestion;
-    });
-  }
-  return safe;
-}
+  const answerKeyNames = new Set([
+    'correctAnswer',
+    'correctOptionId',
+    'answerKey',
+    'acceptedAnswers',
+    'isCorrect',
+    'correct'
+  ]);
 
+  function strip(value) {
+    if (Array.isArray(value)) return value.map(strip);
+    if (!value || typeof value !== 'object') return value;
+
+    const safe = {};
+    for (const [key, nestedValue] of Object.entries(value)) {
+      if (!answerKeyNames.has(key)) {
+        safe[key] = strip(nestedValue);
+      }
+    }
+    return safe;
+  }
+
+  return strip(content);
+}
 /** Pure grading function, exported for focused unit tests. */
 export function gradeQuestion(question, submittedAnswer) {
   const answerKey = question.correctAnswer ?? question.correctOptionId ?? question.answerKey;
@@ -177,7 +175,7 @@ export function gradeQuestion(question, submittedAnswer) {
     throw error;
   }
 
-  const normalize = value => String(value).normalize('NFKC').trim().toLocaleLowerCase();
+  const normalize = value => String(value).normalize('NFKC').trim().toLowerCase();
   const isCorrect = acceptedAnswers.some(value => normalize(value) === normalize(submittedAnswer));
 
   return {

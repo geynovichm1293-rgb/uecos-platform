@@ -55,7 +55,7 @@ router.post('/goal', authenticate, validate('goal'), asyncHandler(async (req, re
   const { subjectId, goalDescription } = req.body;
   const learnerId = await getAuthenticatedLearnerId(req);
   
-  logger.info('🎯 Goal selection', { learnerId, subjectId, goalDescription });
+  logger.info('Goal selection', { learnerId, subjectId });
   
   // Generate learning path
   const pathData = await generateLearningPath(learnerId, subjectId, goalDescription);

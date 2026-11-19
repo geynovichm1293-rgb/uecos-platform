@@ -66,4 +66,23 @@ test.describe('E2E: Security & Authorization', () => {
       assert.ok(true);
     }
   });
+  test.it('Should rate limit repeated login attempts', async () => {
+    let wasRateLimited = false;
+    for (let attempt = 0; attempt < 12; attempt += 1) {
+      try {
+        await client.post('/api/auth/login', {
+          email: 'rate-limit-check@example.com',
+          password: 'IncorrectPassword123!'
+        });
+      } catch (error) {
+        if (error.response?.status === 429) {
+          wasRateLimited = true;
+          break;
+        }
+        assert.equal(error.response?.status, 401);
+      }
+    }
+    assert.equal(wasRateLimited, true, 'Repeated login attempts should be rate limited');
+  });
+  
 });

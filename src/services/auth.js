@@ -1,5 +1,6 @@
 import bcryptjs from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import { randomUUID } from 'node:crypto';
 import { getPool } from '../db/init.js';
 import { logger } from '../utils/logger.js';
 
@@ -27,9 +28,9 @@ export async function comparePassword(password, hash) {
 /**
  * Create JWT token
  */
-export function createToken(userId, role) {
+export function createToken(userId, role, tokenVersion = 0) {
   return jwt.sign(
-    { userId, role, iat: Math.floor(Date.now() / 1000) },
+    { userId, role, tokenVersion, jti: randomUUID(), iat: Math.floor(Date.now() / 1000) },
     JWT_SECRET,
     { expiresIn: JWT_EXPIRY, algorithm: 'HS256' }
   );
@@ -94,7 +95,7 @@ export async function authenticateUser(email, password) {
   try {
     // Find user
     const result = await pool.query(
-      'SELECT id, email, password_hash, role FROM users WHERE email = $1',
+      'SELECT id, email, password_hash, role, token_version FROM users WHERE email = $1',
       [email]
     );
     
@@ -116,7 +117,7 @@ export async function authenticateUser(email, password) {
     }
     
     // Generate token
-    const token = createToken(user.id, user.role);
+    const token = createToken(user.id, user.role, user.token_version ?? 0);
     
     logger.info('🔐 User authenticated successfully', { userId: user.id, email: user.email });
     
@@ -139,7 +140,7 @@ export async function getUserById(userId) {
   const pool = getPool();
   
   const result = await pool.query(
-    'SELECT id, email, role, status, created_at FROM users WHERE id = $1',
+    'SELECT id, email, role, status, token_version, created_at FROM users WHERE id = $1',
     [userId]
   );
   
@@ -180,4 +181,17 @@ export async function getLearnerProfile(userId) {
   );
   
   return result.rows[0] || null;
+}
+
+/**
+ * Invalidate all previously issued access tokens for this account.
+ * A version bump makes every older JWT fail authentication.
+ */
+export async function revokeUserTokens(userId) {
+  const pool = getPool();
+  const result = await pool.query(
+    'UPDATE users SET token_version = token_version + 1, updated_at = CURRENT_TIMESTAMP WHERE id = $1 RETURNING token_version',
+    [userId]
+  );
+  return result.rows[0]?.token_version ?? null;
 }

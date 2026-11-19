@@ -19,6 +19,7 @@ let testUser = {
 
 let authToken = null;
 let userId = null;
+let subjectId = null;
 
 const test = await import('node:test');
 
@@ -57,12 +58,13 @@ test.describe('E2E: Complete Learning Journey', () => {
     
     assert.strictEqual(response.status, 200, 'Subjects endpoint should return 200');
     assert.ok(Array.isArray(response.data.subjects), 'Should return array of subjects');
+    assert.ok(response.data.subjects.length > 0, 'Seeded subjects should be available');
+    subjectId = response.data.subjects[0].id;
   });
   
   test.it('Step 4: User sets learning goal', async () => {
-    // Assuming a subject with ID 1 exists
     const response = await client.post('/api/learner/goal', {
-      subjectId: 1,
+      subjectId,
       goalDescription: 'Learn basic math'
     });
     
@@ -79,12 +81,13 @@ test.describe('E2E: Complete Learning Journey', () => {
   });
   
   test.it('Step 6: User cannot access other user\'s data', async () => {
-    try {
-      await client.get('/api/learner/progress?learner_id=99999');
-      assert.fail('Should not allow access to other user data');
-    } catch (error) {
-      assert.strictEqual(error.response.status, 403, 'Should return 403 Forbidden');
-    }
+    const ownProgress = await client.get('/api/learner/progress');
+    const attemptedOverride = await client.get('/api/learner/progress?learner_id=99999');
+    assert.deepStrictEqual(
+      attemptedOverride.data,
+      ownProgress.data,
+      'A caller-supplied learner_id must not change which learner record is returned'
+    );
   });
   
   test.it('Step 7: Logout clears token', async () => {

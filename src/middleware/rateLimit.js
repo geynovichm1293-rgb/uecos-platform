@@ -3,13 +3,13 @@ import { getPool } from '../db/init.js';
 import { logger } from '../utils/logger.js';
 
 let requestsSinceCleanup = 0;
+const RATE_LIMIT_HASH_SECRET = process.env.RATE_LIMIT_HASH_SECRET || process.env.JWT_SECRET;
+if (!RATE_LIMIT_HASH_SECRET || RATE_LIMIT_HASH_SECRET.length < 32) {
+  throw new Error('A 32-character RATE_LIMIT_HASH_SECRET or JWT_SECRET is required.');
+}
 
 function hashBucketKey(value) {
-  const secret = process.env.RATE_LIMIT_HASH_SECRET || process.env.JWT_SECRET;
-  if (!secret || secret.length < 32) {
-    throw new Error('A 32-character RATE_LIMIT_HASH_SECRET or JWT_SECRET is required.');
-  }
-  return createHmac('sha256', secret).update(value).digest('hex');
+  return createHmac('sha256', RATE_LIMIT_HASH_SECRET).update(value).digest('hex');
 }
 
 /**

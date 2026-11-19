@@ -66,6 +66,40 @@ test.describe('E2E: Security & Authorization', () => {
       assert.ok(true);
     }
   });
+  test.it('Should allow administrator analytics and deny learner analytics', async () => {
+    const learnerClient = axios.create({ baseURL: API_BASE });
+    const learnerEmail = `analytics-${Date.now()}@example.com`;
+    const registration = await learnerClient.post('/api/auth/register', {
+      email: learnerEmail,
+      password: 'LearnerPassword123!'
+    });
+    const learnerId = registration.data.learner.id;
+    const learnerLogin = await learnerClient.post('/api/auth/login', {
+      email: learnerEmail,
+      password: 'LearnerPassword123!'
+    });
+    learnerClient.defaults.headers.common['Authorization'] = `Bearer ${learnerLogin.data.token}`;
+
+    const adminLogin = await client.post('/api/auth/login', {
+      email: 'admin@uecos.test',
+      password: 'TestAdminPassword123!'
+    });
+    const adminClient = axios.create({ baseURL: API_BASE });
+    adminClient.defaults.headers.common['Authorization'] = `Bearer ${adminLogin.data.token}`;
+
+    const analytics = await adminClient.get(`/api/analytics/learner/${learnerId}`);
+    assert.equal(analytics.status, 200);
+    assert.equal(Number(analytics.data.learning_paths), 0);
+    assert.equal(Number(analytics.data.lessons_started), 0);
+
+    try {
+      await learnerClient.get(`/api/analytics/learner/${learnerId}`);
+      assert.fail('Learners must not access administrator analytics');
+    } catch (error) {
+      assert.equal(error.response.status, 403);
+    }
+  });
+
   test.it('Should rate limit repeated login attempts', async () => {
     let wasRateLimited = false;
     for (let attempt = 0; attempt < 12; attempt += 1) {

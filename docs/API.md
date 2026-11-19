@@ -59,7 +59,7 @@ Authenticate user and return JWT token
     "role": "learner"
   },
   "learner": {...},
-  "token": "eyJhbGciOiJIUzI1NiIs..."
+  "token": "<JWT_TOKEN>"
 }
 ```
 

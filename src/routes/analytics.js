@@ -14,7 +14,7 @@ const router = express.Router();
 router.post('/event', authenticate, validate('analyticsEvent'), asyncHandler(async (req, res) => {
   const { eventType, data } = req.body;
   
-  logger.info('📊 Analytics event', { eventType });
+  logger.info('Analytics event accepted', { eventTypeLength: eventType.length });
   
   // TODO: Store event in analytics table for future analysis
   

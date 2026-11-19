@@ -93,20 +93,18 @@ uecos-platform/
 git clone https://github.com/geynovichm1293-rgb/uecos-platform.git
 cd uecos-platform
 
-# Install dependencies
-npm install
-
-# Setup environment
+# Configure local secrets and database passwords
 cp .env.example .env
-# Set DATABASE_URL (or PGHOST/PGUSER/PGPASSWORD/PGDATABASE), JWT_SECRET (32+ chars), and other required values
+# Replace all example passwords and JWT_SECRET before starting.
 
-# Run migrations
+# Option A: run the full stack with Docker
+docker compose up --build
+
+# Option B: run Node locally, using the Compose PostgreSQL service
+docker compose up -d postgres
+npm install
 npm run migrate
-
-# Seed sample subjects/topics (optional); no default administrator is created
 npm run seed
-
-# Start development server
 npm run dev
 ```
 

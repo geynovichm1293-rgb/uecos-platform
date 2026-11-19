@@ -1,9 +1,10 @@
 import express from 'express';
 import { asyncHandler } from '../middleware/errorHandler.js';
+import { validate } from '../middleware/validation.js';
 import { authenticate } from '../middleware/auth.js';
 import { logger } from '../utils/logger.js';
 import { generateLearningPath, getLearningPath } from '../services/learningPath.js';
-import { getLesson, completeLesson, generateFeedback, updateProgress } from '../services/lesson.js';
+import { getLesson, completeLesson, evaluateLessonAnswer, updateProgress } from '../services/lesson.js';
 import { getLearnerProgress, getSkillProgress } from '../services/progress.js';
 import { getNextRecommendation } from '../services/recommendation.js';
 import { createDiagnosticAssessment, submitAssessment, getAssessment } from '../services/assessment.js';
@@ -105,31 +106,17 @@ router.get('/lesson/:lessonId', authenticate, asyncHandler(async (req, res) => {
  * POST /api/learner/lesson/:lessonId/answer
  * Submit lesson answer and get feedback
  */
-router.post('/lesson/:lessonId/answer', authenticate, asyncHandler(async (req, res) => {
+router.post('/lesson/:lessonId/answer', authenticate, validate('answer'), asyncHandler(async (req, res) => {
   const { lessonId } = req.params;
-  const { questionId, answer, correctAnswer } = req.body;
+  const { questionId, answer } = req.body;
   const learnerId = await getAuthenticatedLearnerId(req);
-  
-  logger.info('✏️ Answer submission', { lessonId, learnerId });
-  
-  // Generate feedback
-  const feedback = await generateFeedback(
-    { explanation: 'See explanation above' },
-    answer,
-    correctAnswer
-  );
-  
-  // Update progress
+
+  logger.info('Lesson answer submitted', { lessonId, learnerId, questionId });
+
+  const feedback = await evaluateLessonAnswer(lessonId, questionId, answer);
   const completion = feedback.isCorrect ? 100 : 50;
   await updateProgress(lessonId, learnerId, 'in_progress', completion);
-  
-  // Get next recommendation
-  const pool = require('../db/init.js').getPool();
-  const pathResult = await pool.query(
-    'SELECT subject_id FROM learning_paths WHERE id IN (SELECT path_id FROM progress WHERE lesson_id = $1 LIMIT 1) LIMIT 1',
-    [lessonId]
-  );
-  
+
   res.json({
     feedback,
     progress: completion,

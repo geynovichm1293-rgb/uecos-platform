@@ -1,5 +1,4 @@
 import express from 'express';
-import dotenv from 'dotenv';
 import { initializeDatabase } from './db/init.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { securityHeaders } from './middleware/securityHeaders.js';
@@ -9,7 +8,6 @@ import learnerRoutes from './routes/learner.js';
 import contentRoutes from './routes/content.js';
 import analyticsRoutes from './routes/analytics.js';
 
-dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;

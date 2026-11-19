@@ -6,7 +6,8 @@ import { validate } from '../middleware/validation.js';
 import {
   authenticateUser,
   getLearnerProfile,
-  revokeUserTokens
+  revokeUserTokens,
+  registerLearnerAccount
 } from '../services/auth.js';
 
 const router = express.Router();

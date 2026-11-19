@@ -3,6 +3,7 @@ import { asyncHandler } from '../middleware/errorHandler.js';
 import { logger } from '../utils/logger.js';
 import { authenticate } from '../middleware/auth.js';
 import { validate } from '../middleware/validation.js';
+import { rateLimit } from '../middleware/rateLimit.js';
 import {
   authenticateUser,
   getLearnerProfile,
@@ -12,11 +13,14 @@ import {
 
 const router = express.Router();
 
+const registrationRateLimit = rateLimit({ scope: 'register', windowMs: 60 * 60 * 1000, max: 5 });
+const loginRateLimit = rateLimit({ scope: 'login', windowMs: 15 * 60 * 1000, max: 10 });
+
 /**
  * POST /api/auth/register
  * Create new user account and learner profile
  */
-router.post('/register', validate('register'), asyncHandler(async (req, res) => {
+router.post('/register', registrationRateLimit, validate('register'), asyncHandler(async (req, res) => {
   const { email, password, firstName, lastName, age, gradeLevel } = req.body;
   
   const { user, learner: learnerProfile } = await registerLearnerAccount(email, password, {
@@ -39,7 +43,7 @@ router.post('/register', validate('register'), asyncHandler(async (req, res) => 
  * POST /api/auth/login
  * Authenticate user and return JWT
  */
-router.post('/login', validate('login'), asyncHandler(async (req, res) => {
+router.post('/login', loginRateLimit, validate('login'), asyncHandler(async (req, res) => {
   const { email, password } = req.body;
   
   const authResult = await authenticateUser(email, password);

@@ -1,5 +1,5 @@
 import assert from 'assert';
-import { determineStartingLevel, submitAssessment } from '../services/assessment.js';
+import { determineStartingLevel, submitAssessment } from '../assessment.js';
 
 const test = await import('node:test');
 

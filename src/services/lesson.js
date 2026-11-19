@@ -133,32 +133,11 @@ export async function evaluateLessonAnswer(lessonId, questionId, submittedAnswer
     throw error;
   }
 
-  const answerKey = question.correctAnswer ?? question.correctOptionId ?? question.answerKey;
-  const acceptedAnswers = Array.isArray(question.acceptedAnswers)
-    ? question.acceptedAnswers
-    : [answerKey];
-
-  if (acceptedAnswers.some(value => value === undefined || value === null)) {
-    const error = new Error('This question is not configured for server-side grading');
-    error.status = 422;
-    throw error;
-  }
-
-  const normalize = value => String(value).normalize('NFKC').trim().toLocaleLowerCase();
-  const isCorrect = acceptedAnswers.some(value => normalize(value) === normalize(submittedAnswer));
-
-  return {
-    isCorrect,
-    message: isCorrect
-      ? "Great job! That's correct."
-      : "Not quite. Review the explanation and try again.",
-    explanation: question.explanation ?? null,
-    correctAnswer: isCorrect ? null : String(acceptedAnswers[0])
-  };
+  return gradeQuestion(question, submittedAnswer);
 }
 
 /** Remove answer keys from question objects before sending lesson content to clients. */
-function sanitizeLessonContent(content) {
+export function sanitizeLessonContent(content) {
   if (!content || typeof content !== 'object' || Array.isArray(content)) return content;
   const safe = { ...content };
   if (Array.isArray(content.questions)) {
@@ -183,4 +162,30 @@ function sanitizeLessonContent(content) {
     });
   }
   return safe;
+}
+
+/** Pure grading function, exported for focused unit tests. */
+export function gradeQuestion(question, submittedAnswer) {
+  const answerKey = question.correctAnswer ?? question.correctOptionId ?? question.answerKey;
+  const acceptedAnswers = Array.isArray(question.acceptedAnswers)
+    ? question.acceptedAnswers
+    : [answerKey];
+
+  if (acceptedAnswers.length === 0 || acceptedAnswers.some(value => value === undefined || value === null)) {
+    const error = new Error('This question is not configured for server-side grading');
+    error.status = 422;
+    throw error;
+  }
+
+  const normalize = value => String(value).normalize('NFKC').trim().toLocaleLowerCase();
+  const isCorrect = acceptedAnswers.some(value => normalize(value) === normalize(submittedAnswer));
+
+  return {
+    isCorrect,
+    message: isCorrect
+      ? "Great job! That's correct."
+      : "Not quite. Review the explanation and try again.",
+    explanation: question.explanation ?? null,
+    correctAnswer: isCorrect ? null : String(acceptedAnswers[0])
+  };
 }

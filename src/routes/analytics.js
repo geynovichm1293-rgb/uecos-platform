@@ -1,6 +1,6 @@
 import express from 'express';
 import { asyncHandler } from '../middleware/errorHandler.js';
-import { authenticate } from '../middleware/auth.js';
+import { authenticate, authorize } from '../middleware/auth.js';
 import { logger } from '../utils/logger.js';
 import { getPool } from '../db/init.js';
 
@@ -10,7 +10,7 @@ const router = express.Router();
  * POST /api/analytics/event
  * Track user event
  */
-router.post('/event', asyncHandler(async (req, res) => {
+router.post('/event', authenticate, asyncHandler(async (req, res) => {
   const { eventType, data } = req.body;
   
   logger.info('📊 Analytics event', { eventType });
@@ -24,7 +24,7 @@ router.post('/event', asyncHandler(async (req, res) => {
  * GET /api/analytics/learner/:learnerId (admin only)
  * Get learner analytics
  */
-router.get('/learner/:learnerId', authenticate, asyncHandler(async (req, res) => {
+router.get('/learner/:learnerId', authenticate, authorize('administrator'), asyncHandler(async (req, res) => {
   const { learnerId } = req.params;
   
   logger.info('📈 Learner analytics', { learnerId });

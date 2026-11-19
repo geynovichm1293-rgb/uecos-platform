@@ -56,7 +56,7 @@ export async function registerUser(email, password, role = 'learner') {
   try {
     // Check if user exists
     const existingUser = await pool.query(
-      'SELECT id FROM users WHERE email = $1',
+      'SELECT id FROM users WHERE LOWER(email) = LOWER($1)',
       [email]
     );
     
@@ -94,7 +94,7 @@ export async function authenticateUser(email, password) {
   try {
     // Find user
     const result = await pool.query(
-      'SELECT id, email, password_hash, role, token_version FROM users WHERE email = $1',
+      'SELECT id, email, password_hash, role, token_version FROM users WHERE LOWER(email) = LOWER($1)',
       [email]
     );
     

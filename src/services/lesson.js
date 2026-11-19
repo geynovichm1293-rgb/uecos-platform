@@ -10,7 +10,7 @@ export async function getLesson(lessonId, learnerId) {
   try {
     // Get lesson
     const lessonResult = await pool.query(
-      'SELECT * FROM lessons WHERE id = $1',
+      "SELECT * FROM lessons WHERE id = $1 AND status = 'published',"
       [lessonId]
     );
     
@@ -27,14 +27,15 @@ export async function getLesson(lessonId, learnerId) {
     );
     
     const progress = progressResult.rows[0] || null;
-    
-    logger.info('📖 Lesson loaded', { lessonId, learnerId });
-    
-    return {
-      lesson,
-      progress,
-      content: lesson.content ? JSON.parse(lesson.content) : null
-    };
+    const rawContent = typeof lesson.content === 'string'
+      ? JSON.parse(lesson.content)
+      : lesson.content;
+    const content = sanitizeLessonContent(rawContent);
+    const safeLesson = { ...lesson, content };
+
+    logger.info('Lesson loaded', { lessonId, learnerId });
+
+    return { lesson: safeLesson, progress, content };
   } catch (error) {
     logger.error('❌ Lesson fetch failed', { error: error.message });
     throw error;
@@ -100,4 +101,86 @@ export async function generateFeedback(question, userAnswer, correctAnswer) {
 
 function normalizeAnswer(answer) {
   return String(answer).toLowerCase().trim();
+}
+
+
+/**
+ * Grade a lesson answer using the answer key stored in the database.
+ * Client-provided correctness flags or answer keys are never accepted.
+ */
+export async function evaluateLessonAnswer(lessonId, questionId, submittedAnswer) {
+  const pool = getPool();
+  const result = await pool.query(
+    "SELECT content FROM lessons WHERE id = $1 AND status = 'published'",
+    [lessonId]
+  );
+
+  if (result.rows.length === 0) {
+    const error = new Error('Lesson not found');
+    error.status = 404;
+    throw error;
+  }
+
+  const rawContent = typeof result.rows[0].content === 'string'
+    ? JSON.parse(result.rows[0].content)
+    : result.rows[0].content;
+  const questions = Array.isArray(rawContent?.questions) ? rawContent.questions : [];
+  const question = questions.find(item => String(item.id) === String(questionId));
+
+  if (!question) {
+    const error = new Error('Question not found');
+    error.status = 404;
+    throw error;
+  }
+
+  const answerKey = question.correctAnswer ?? question.correctOptionId ?? question.answerKey;
+  const acceptedAnswers = Array.isArray(question.acceptedAnswers)
+    ? question.acceptedAnswers
+    : [answerKey];
+
+  if (acceptedAnswers.some(value => value === undefined || value === null)) {
+    const error = new Error('This question is not configured for server-side grading');
+    error.status = 422;
+    throw error;
+  }
+
+  const normalize = value => String(value).normalize('NFKC').trim().toLocaleLowerCase();
+  const isCorrect = acceptedAnswers.some(value => normalize(value) === normalize(submittedAnswer));
+
+  return {
+    isCorrect,
+    message: isCorrect
+      ? "Great job! That's correct."
+      : "Not quite. Review the explanation and try again.",
+    explanation: question.explanation ?? null,
+    correctAnswer: isCorrect ? null : String(acceptedAnswers[0])
+  };
+}
+
+/** Remove answer keys from question objects before sending lesson content to clients. */
+function sanitizeLessonContent(content) {
+  if (!content || typeof content !== 'object' || Array.isArray(content)) return content;
+  const safe = { ...content };
+  if (Array.isArray(content.questions)) {
+    safe.questions = content.questions.map(question => {
+      if (!question || typeof question !== 'object') return question;
+      const {
+        correctAnswer,
+        correctOptionId,
+        answerKey,
+        acceptedAnswers,
+        isCorrect,
+        ...publicQuestion
+      } = question;
+      if (Array.isArray(question.options)) {
+        publicQuestion.options = question.options.map(option => {
+          if (!option || typeof option !== 'object') return option;
+          const { isCorrect: _isCorrect, correct: _correct, ...publicOption } = option;
+          return publicOption;
+        });
+      }
+      return publicQuestion;
+    });
+  }
+  return safe;
 }

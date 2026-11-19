@@ -4,15 +4,18 @@ services:
     image: postgres:15-alpine
     container_name: uecos-postgres
     environment:
-      POSTGRES_USER: uecos_user
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      POSTGRES_USER: ${POSTGRES_ADMIN_USER:-uecos_admin}
+      POSTGRES_PASSWORD: ${POSTGRES_ADMIN_PASSWORD:?Set POSTGRES_ADMIN_PASSWORD in .env}
+      APP_DB_USER: ${APP_DB_USER:-uecos_app}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:?Set APP_DB_PASSWORD in .env}
       POSTGRES_DB: uecos_dev
     ports:
       - "127.0.0.1:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init-app-user.sh:/docker-entrypoint-initdb.d/01-app-user.sh:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U uecos_user"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_ADMIN_USER:-uecos_admin}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -26,8 +29,8 @@ services:
       NODE_ENV: development
       PGHOST: postgres
       PGPORT: 5432
-      PGUSER: uecos_user
-      PGPASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      PGUSER: ${APP_DB_USER:-uecos_app}
+      PGPASSWORD: ${APP_DB_PASSWORD:?Set APP_DB_PASSWORD in .env}
       PGDATABASE: uecos_dev
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
       PORT: 3000

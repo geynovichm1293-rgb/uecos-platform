@@ -93,6 +93,40 @@ jobs:
           API_BASE: http://127.0.0.1:3000
         run: npm test
 
+  compose-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create isolated Compose environment
+        run: |
+          cat > .env <<'EOF'
+          POSTGRES_ADMIN_USER=uecos_admin
+          POSTGRES_ADMIN_PASSWORD=ci-compose-admin-password-only
+          APP_DB_USER=uecos_app
+          APP_DB_PASSWORD=ci-compose-app-password-only
+          JWT_SECRET=test-only-secret-for-ci-at-least-32-characters
+          NODE_ENV=development
+          PORT=3000
+          TRUST_PROXY_HOPS=0
+          EOF
+      - name: Start Compose stack
+        run: docker compose up --build -d
+      - name: Verify API health using the non-superuser database role
+        run: |
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent http://127.0.0.1:3000/health > /dev/null; then
+              echo "Compose API is healthy"
+              exit 0
+            fi
+            sleep 2
+          done
+          docker compose ps
+          docker compose logs
+          exit 1
+      - name: Stop Compose stack
+        if: always()
+        run: docker compose down -v
+
   docker-build:
     runs-on: ubuntu-latest
     steps:

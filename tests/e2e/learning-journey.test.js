@@ -165,6 +165,33 @@ test.describe('E2E: Complete Learning Journey', () => {
     await client.post(`/api/learner/lesson/${lessonIdFromSeed}/complete`);
   });
 
+  test.it('Step 4a3: Seeded geometry lesson is published, sanitized, and server-graded', async () => {
+    const seeded = await testPool.query(
+      `SELECT l.id
+       FROM lessons l
+       JOIN skills s ON s.id = l.skill_id
+       JOIN topics t ON t.id = s.topic_id
+       WHERE t.name = 'Geometry Basics'
+         AND l.title = 'Geometry: Shape Properties, Perimeter, and Area'
+         AND l.status = 'published'
+       LIMIT 1`
+    );
+    assert.equal(seeded.rows.length, 1, 'The validated geometry lesson should be seeded');
+    const lessonIdFromSeed = seeded.rows[0].id;
+    const lesson = await client.get(`/api/learner/lesson/${lessonIdFromSeed}`);
+    assert.equal(lesson.status, 200);
+    assert.equal(lesson.data.content.questions.length, 20);
+    assert.equal(lesson.data.content.questions[0].correctAnswer, undefined);
+
+    const answer = await client.post(`/api/learner/lesson/${lessonIdFromSeed}/answer`, {
+      questionId: 'geo-01',
+      answer: '3'
+    });
+    assert.equal(answer.status, 200);
+    assert.equal(answer.data.feedback.isCorrect, true);
+    await client.post(`/api/learner/lesson/${lessonIdFromSeed}/complete`);
+  });
+
   test.it('Step 4b: Learner can load and answer a lesson in their active path', async () => {
     const lesson = await client.get(`/api/learner/lesson/${lessonId}`);
     assert.equal(lesson.status, 200);

@@ -4,6 +4,7 @@ import { authenticate, authorize } from '../middleware/auth.js';
 import { logger } from '../utils/logger.js';
 import { getPool } from '../db/init.js';
 import { validate } from '../middleware/validation.js';
+import { validateLessonForPublishing } from '../services/lesson.js';
 
 const router = express.Router();
 
@@ -185,15 +186,31 @@ router.post('/admin/publish/:lessonId', authenticate, authorize('administrator')
   logger.info('🚀 Lesson publish (admin)', { lessonId });
   
   const pool = getPool();
+  const existing = await pool.query(
+    'SELECT id, content FROM lessons WHERE id = $1',
+    [lessonId]
+  );
+  if (existing.rows.length === 0) {
+    return res.status(404).json({ error: 'Lesson not found' });
+  }
+
+  const content = typeof existing.rows[0].content === 'string'
+    ? JSON.parse(existing.rows[0].content)
+    : existing.rows[0].content;
+  const qualityErrors = validateLessonForPublishing(content);
+  if (qualityErrors.length > 0) {
+    return res.status(422).json({
+      error: 'Lesson does not meet the publishing requirements',
+      details: qualityErrors
+    });
+  }
+
   const result = await pool.query(
     `UPDATE lessons SET status = $1, updated_at = CURRENT_TIMESTAMP
      WHERE id = $2
-     RETURNING *`,
+     RETURNING id, skill_id, title, description, duration_minutes, difficulty_level, status, created_at, updated_at`,
     ['published', lessonId]
   );
-  if (result.rows.length === 0) {
-    return res.status(404).json({ error: 'Lesson not found' });
-  }
   res.json({ status: 'published', lesson: result.rows[0] });
 }));
 

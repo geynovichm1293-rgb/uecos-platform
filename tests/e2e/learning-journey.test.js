@@ -311,6 +311,10 @@ test.describe('E2E: Complete Learning Journey', () => {
       [userId, subjectId]
     );
     assert.equal(pathLevel.rows[0].starting_level, 'INTRODUCED');
+
+    // The next-lesson recommender must now read the updated diagnostic level.
+    const refreshedRecommendation = await client.post(`/api/learner/lesson/${lessonId}/complete`);
+    assert.equal(refreshedRecommendation.status, 200);
   });
 
   test.it('Step 9: Completed assessments cannot be submitted again', async () => {

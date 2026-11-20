@@ -76,7 +76,8 @@ test.describe('E2E: Complete Learning Journey', () => {
     assert.strictEqual(response.status, 200, 'Subjects endpoint should return 200');
     assert.ok(Array.isArray(response.data.subjects), 'Should return array of subjects');
     assert.ok(response.data.subjects.length > 0, 'Seeded subjects should be available');
-    subjectId = response.data.subjects[0].id;
+    assert.ok(subjectId, 'Mathematics subject should be available');
+    subjectId = response.data.subjects.find(subject => subject.name === 'Mathematics')?.id;
     const topicResponse = await client.get('/api/content/search?q=Arithmetic&type=topic');
     assert.ok(topicResponse.data.topics.length > 0, 'Seeded math topic should be searchable');
     topicId = topicResponse.data.topics[0].id;

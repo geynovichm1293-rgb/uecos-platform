@@ -177,6 +177,49 @@ export async function evaluateLessonAnswer(lessonId, learnerId, questionId, subm
   return gradeQuestion(question, submittedAnswer);
 }
 
+/** Validate the minimum structure required before a lesson can be published. */
+export function validateLessonForPublishing(content) {
+  const errors = [];
+  if (!content || typeof content !== 'object' || Array.isArray(content)) {
+    return ['Lesson content must be an object'];
+  }
+  if (!Array.isArray(content.questions) || content.questions.length === 0) {
+    return ['A publishable lesson must include at least one graded question'];
+  }
+
+  const seenIds = new Set();
+  for (const [index, question] of content.questions.entries()) {
+    const label = `questions[${index}]`;
+    if (!question || typeof question !== 'object' || Array.isArray(question)) {
+      errors.push(`${label} must be an object`);
+      continue;
+    }
+    if (question.id === undefined || question.id === null || String(question.id).trim() === '') {
+      errors.push(`${label}.id is required`);
+    } else if (seenIds.has(String(question.id))) {
+      errors.push(`${label}.id must be unique`);
+    } else {
+      seenIds.add(String(question.id));
+    }
+
+    const prompt = question.prompt ?? question.text;
+    if (typeof prompt !== 'string' || prompt.trim().length < 5) {
+      errors.push(`${label} needs a meaningful prompt`);
+    }
+
+    const answerKey = question.correctAnswer ?? question.correctOptionId ?? question.answerKey;
+    const accepted = Array.isArray(question.acceptedAnswers) ? question.acceptedAnswers : [answerKey];
+    if (accepted.length === 0 || accepted.some(value => value === undefined || value === null || String(value).trim() === '')) {
+      errors.push(`${label} needs a server-side answer key`);
+    }
+
+    if (typeof question.explanation !== 'string' || question.explanation.trim().length < 8) {
+      errors.push(`${label} needs an explanation for learner feedback`);
+    }
+  }
+  return errors;
+}
+
 /** Remove answer keys from question objects before sending lesson content to clients. */
 export function sanitizeLessonContent(content) {
   const answerKeyNames = new Set([

@@ -155,6 +155,22 @@ test.describe('E2E: Complete Learning Journey', () => {
     assert.ok(response.data.overall, 'Should return progress data');
   });
   
+  test.it('Step 5b: Progress filters reject invalid subjects and hide inactive-path skill data', async () => {
+    try {
+      await client.get('/api/learner/progress?subjectId=not-a-number');
+      assert.fail('Invalid subject IDs must be rejected');
+    } catch (error) {
+      assert.equal(error.response.status, 400);
+    }
+
+    const subjects = await client.get('/api/content/subjects');
+    const inactiveSubject = subjects.data.subjects.find(subject => subject.name === 'Science');
+    assert.ok(inactiveSubject, 'Science subject should be seeded');
+    const response = await client.get(`/api/learner/progress?subjectId=${inactiveSubject.id}`);
+    assert.equal(response.status, 200);
+    assert.deepStrictEqual(response.data.bySkill, []);
+  });
+
   test.it('Step 6: User cannot access other user\'s data', async () => {
     const ownProgress = await client.get('/api/learner/progress');
     const attemptedOverride = await client.get('/api/learner/progress?learner_id=99999');

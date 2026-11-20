@@ -63,6 +63,7 @@ async function runMigrations(pool) {
     createLessonsTable,
     createLearningPathsTable,
     ensureSingleActiveLearningPath,
+    ensureLearningPathStartingLevel,
     createProgressTable,
     createAssessmentsTable
   ];
@@ -254,6 +255,12 @@ async function ensureSingleActiveLearningPath(pool) {
     ON learning_paths (learner_id, subject_id)
     WHERE status = 'active'
   `);
+}
+
+async function ensureLearningPathStartingLevel(pool) {
+  await pool.query(
+    "ALTER TABLE learning_paths ADD COLUMN IF NOT EXISTS starting_level VARCHAR(50) NOT NULL DEFAULT 'NOT_ASSESSED'"
+  );
 }
 
 async function createProgressTable(pool) {

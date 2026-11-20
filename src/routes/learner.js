@@ -145,7 +145,12 @@ router.post('/lesson/:lessonId/complete', authenticate, asyncHandler(async (req,
      JOIN topics t ON t.subject_id = lp.subject_id
      JOIN skills s ON s.topic_id = t.id
      JOIN lessons l ON l.skill_id = s.id
-     WHERE l.id = $1 AND lp.learner_id = $2
+     WHERE l.id = $1
+       AND lp.learner_id = $2
+       AND lp.status = 'active'
+       AND t.status = 'published'
+       AND s.status = 'published'
+       AND l.status = 'published'
      ORDER BY lp.subject_id
      LIMIT 1`,
     [lessonId, learnerId]

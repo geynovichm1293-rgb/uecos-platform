@@ -166,7 +166,11 @@ router.post('/lesson/:lessonId/complete', authenticate, asyncHandler(async (req,
  * Get learner's overall progress
  */
 router.get('/progress', authenticate, asyncHandler(async (req, res) => {
-  const { subjectId } = req.query;
+  const rawSubjectId = req.query.subjectId;
+  const subjectId = rawSubjectId === undefined ? null : Number(rawSubjectId);
+  if (rawSubjectId !== undefined && (!Number.isSafeInteger(subjectId) || subjectId <= 0)) {
+    return res.status(400).json({ error: 'subjectId must be a positive integer' });
+  }
   const learnerId = await getAuthenticatedLearnerId(req);
   
   logger.info('📈 Progress fetch', { learnerId });

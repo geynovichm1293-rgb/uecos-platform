@@ -62,6 +62,7 @@ async function runMigrations(pool) {
     createSkillsTable,
     createLessonsTable,
     createLearningPathsTable,
+    ensureSingleActiveLearningPath,
     createProgressTable,
     createAssessmentsTable
   ];
@@ -228,6 +229,30 @@ async function createLearningPathsTable(pool) {
       FOREIGN KEY (learner_id) REFERENCES learners(id) ON DELETE CASCADE,
       FOREIGN KEY (subject_id) REFERENCES subjects(id)
     )
+  `);
+}
+
+async function ensureSingleActiveLearningPath(pool) {
+  // Repair legacy duplicate active paths before enforcing the invariant.
+  await pool.query(`
+    WITH ranked_paths AS (
+      SELECT id,
+             ROW_NUMBER() OVER (
+               PARTITION BY learner_id, subject_id
+               ORDER BY updated_at DESC, id DESC
+             ) AS position
+      FROM learning_paths
+      WHERE status = 'active'
+    )
+    UPDATE learning_paths lp
+    SET status = 'superseded', updated_at = CURRENT_TIMESTAMP
+    FROM ranked_paths ranked
+    WHERE lp.id = ranked.id AND ranked.position > 1
+  `);
+  await pool.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS learning_paths_one_active_per_subject_idx
+    ON learning_paths (learner_id, subject_id)
+    WHERE status = 'active'
   `);
 }
 

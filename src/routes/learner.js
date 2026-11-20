@@ -223,6 +223,7 @@ router.post('/assessment/diagnostic', authenticate, validate('diagnostic'), asyn
   for (const row of lessonRows.rows) {
     const content = typeof row.content === 'string' ? JSON.parse(row.content) : row.content;
     for (const question of (Array.isArray(content?.questions) ? content.questions : [])) {
+      if (!question || typeof question !== 'object' || Array.isArray(question)) continue;
       const answerKey = question.correctAnswer ?? question.correctOptionId ?? question.answerKey;
       const acceptedAnswers = Array.isArray(question.acceptedAnswers) ? question.acceptedAnswers : [answerKey];
       const questionId = `${row.lesson_id}:${question.id}`;

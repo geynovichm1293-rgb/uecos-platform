@@ -125,7 +125,7 @@ test.describe('E2E: Complete Learning Journey', () => {
     const lessonIdFromSeed = seeded.rows[0].id;
     const lesson = await client.get(`/api/learner/lesson/${lessonIdFromSeed}`);
     assert.equal(lesson.status, 200);
-    assert.equal(lesson.data.content.questions.length, 5);
+    assert.equal(lesson.data.content.questions.length, 20);
     assert.equal(lesson.data.content.questions[0].correctAnswer, undefined);
 
     const answer = await client.post(`/api/learner/lesson/${lessonIdFromSeed}/answer`, {

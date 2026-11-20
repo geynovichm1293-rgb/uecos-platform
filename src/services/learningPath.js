@@ -11,6 +11,8 @@ export async function generateLearningPath(learnerId, subjectId, goalDescription
 
   try {
     await client.query('BEGIN');
+    // Serialize concurrent path replacements for the same learner/subject pair.
+    await client.query('SELECT pg_advisory_xact_lock($1::integer, $2::integer)', [learnerId, subjectId]);
 
     const subjectResult = await client.query(
       `SELECT id FROM subjects WHERE id = $1 AND status = 'published' FOR SHARE`,

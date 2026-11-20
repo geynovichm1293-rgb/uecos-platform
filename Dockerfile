@@ -4,7 +4,7 @@ WORKDIR /app
 
 # Copy package manifest and install production dependencies.
 COPY package*.json ./
-RUN npm install --omit=dev
+RUN npm ci --omit=dev
 
 # Copy application source.
 COPY src/ ./src/

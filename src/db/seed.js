@@ -281,6 +281,108 @@ async function seedDatabase() {
           );
         }
       }
+
+      // Seed a second complete topic slice for fractions and decimals.
+      const fractionsTopic = await pool.query(
+        'SELECT id FROM topics WHERE subject_id = $1 AND name = $2 AND status = $3',
+        [mathSubjectId, 'Fractions and Decimals', 'published']
+      );
+      if (fractionsTopic.rows.length > 0) {
+        const topicId = fractionsTopic.rows[0].id;
+        let skill = await pool.query(
+          'SELECT id FROM skills WHERE topic_id = $1 AND name = $2 LIMIT 1',
+          [topicId, 'Fraction Concepts and Equivalent Forms']
+        );
+        if (skill.rows.length === 0) {
+          skill = await pool.query(
+            `INSERT INTO skills (topic_id, name, description, difficulty_level, status)
+             VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+            [topicId, 'Fraction Concepts and Equivalent Forms',
+              'Interpret fractions, identify equivalent forms, and connect common fractions to decimals.',
+              'beginner', 'published']
+          );
+        }
+
+        const lessonContent = {
+          overview: 'Understand fractions as equal parts of a whole and connect common fractions to decimal notation.',
+          learningObjectives: [
+            'Identify the numerator and denominator and explain what each represents',
+            'Find simple fractions of a quantity and compare fractions with related denominators',
+            'Add and subtract fractions with like denominators',
+            'Convert common fractions to equivalent decimals and simplify fractions'
+          ],
+          sections: [
+            {
+              title: 'Numerator and denominator',
+              body: 'The denominator tells how many equal parts make one whole. The numerator tells how many of those parts are being described.'
+            },
+            {
+              title: 'Equivalent fractions',
+              body: 'Equivalent fractions name the same amount. Multiply or divide the numerator and denominator by the same nonzero number to create an equivalent fraction.'
+            },
+            {
+              title: 'Fractions of a quantity',
+              body: 'To find a unit fraction of a quantity, divide the quantity by the denominator. Multiply that result by the numerator for a non-unit fraction.'
+            },
+            {
+              title: 'Fractions and decimals',
+              body: 'A fraction can be written as a decimal by dividing its numerator by its denominator. Common examples include one-half as 0.5 and one-quarter as 0.25.'
+            }
+          ],
+          workedExamples: [
+            {
+              prompt: 'Find three-quarters of 8.',
+              solution: 'One-quarter of 8 is 8 ÷ 4 = 2. Three-quarters is 3 × 2 = 6.'
+            },
+            {
+              prompt: 'Write 0.75 as a fraction in simplest form.',
+              solution: '0.75 = 75/100. Divide numerator and denominator by 25 to get 3/4.'
+            }
+          ],
+          questions: [
+            { id: 'frac-01', prompt: 'In the fraction 3/5, what is the numerator?', correctAnswer: '3', explanation: 'The numerator is the top number. It tells how many equal parts are being counted.' },
+            { id: 'frac-02', prompt: 'In the fraction 3/5, what is the denominator?', correctAnswer: '5', explanation: 'The denominator is the bottom number. It tells how many equal parts make one whole.' },
+            { id: 'frac-03', prompt: 'What is one-quarter of 8?', correctAnswer: '2', explanation: 'One-quarter means divide by 4. Since 8 ÷ 4 = 2, the answer is 2.' },
+            { id: 'frac-04', prompt: 'What is three-quarters of 8?', correctAnswer: '6', explanation: 'First find one-quarter: 8 ÷ 4 = 2. Then take three parts: 3 × 2 = 6.' },
+            { id: 'frac-05', prompt: 'Which is larger: 1/2 or 1/4?', correctAnswer: '1/2', explanation: 'When the whole is the same size, halves are larger pieces than quarters. One-half is greater than one-quarter.' },
+            { id: 'frac-06', prompt: 'Write 2/4 as an equivalent fraction in simplest form.', correctAnswer: '1/2', explanation: 'Divide the numerator and denominator by 2: 2/4 = 1/2.' },
+            { id: 'frac-07', prompt: 'Calculate 1/3 + 1/3.', correctAnswer: '2/3', explanation: 'The denominators are the same, so add the numerators: 1 + 1 = 2. Keep the denominator 3.' },
+            { id: 'frac-08', prompt: 'Calculate 1/4 + 2/4.', correctAnswer: '3/4', explanation: 'The denominators are the same, so add the numerators: 1 + 2 = 3. The result is 3/4.' },
+            { id: 'frac-09', prompt: 'Calculate 3/5 - 1/5.', correctAnswer: '2/5', explanation: 'Subtract the numerators and keep the denominator: 3 - 1 = 2, so the result is 2/5.' },
+            { id: 'frac-10', prompt: 'What is two-thirds of 12?', correctAnswer: '8', explanation: 'One-third of 12 is 12 ÷ 3 = 4. Two-thirds is 2 × 4 = 8.' },
+            { id: 'frac-11', prompt: 'Write 0.5 as a fraction in simplest form.', correctAnswer: '1/2', explanation: '0.5 is five-tenths, or 5/10. Divide the numerator and denominator by 5 to get 1/2.' },
+            { id: 'frac-12', prompt: 'Write 0.25 as a fraction in simplest form.', correctAnswer: '1/4', explanation: '0.25 is 25/100. Divide both numbers by 25 to get 1/4.' },
+            { id: 'frac-13', prompt: 'Write 3/10 as a decimal.', correctAnswer: '0.3', explanation: 'Three-tenths means 3 divided by 10, which is 0.3.' },
+            { id: 'frac-14', prompt: 'Write 0.75 as a fraction in simplest form.', correctAnswer: '3/4', explanation: '0.75 is 75/100. Divide the numerator and denominator by 25 to get 3/4.' },
+            { id: 'frac-15', prompt: 'Write 1/2 as a decimal.', correctAnswer: '0.5', explanation: 'One-half is the same as five-tenths, which is written as 0.5.' },
+            { id: 'frac-16', prompt: 'Write 0.2 as a fraction in simplest form.', correctAnswer: '1/5', explanation: '0.2 is 2/10. Divide numerator and denominator by 2 to get 1/5.' },
+            { id: 'frac-17', prompt: 'Calculate 2/5 + 1/5.', correctAnswer: '3/5', explanation: 'The denominators match, so add the numerators: 2 + 1 = 3. The result is 3/5.' },
+            { id: 'frac-18', prompt: 'Calculate 7/8 - 3/8 and write the answer in simplest form.', correctAnswer: '1/2', explanation: '7/8 - 3/8 = 4/8. Divide numerator and denominator by 4 to simplify to 1/2.' },
+            { id: 'frac-19', prompt: 'What is three-quarters of 20?', correctAnswer: '15', explanation: 'One-quarter of 20 is 20 ÷ 4 = 5. Three-quarters is 3 × 5 = 15.' },
+            { id: 'frac-20', prompt: 'A pizza is cut into 8 equal slices. Three slices are eaten. What fraction of the pizza remains?', correctAnswer: '5/8', explanation: 'There are 8 equal slices and 3 are eaten, leaving 5. The fraction remaining is 5/8.' }
+          ]
+        };
+        const qualityErrors = validateLessonForPublishing(lessonContent);
+        if (qualityErrors.length > 0) {
+          throw new Error(`Seed fractions lesson failed publishing quality checks: ${qualityErrors.join('; ')}`);
+        }
+
+        const existingLesson = await pool.query(
+          'SELECT id FROM lessons WHERE skill_id = $1 AND title = $2 LIMIT 1',
+          [skill.rows[0].id, 'Fractions: Parts of a Whole and Equivalent Forms']
+        );
+        if (existingLesson.rows.length === 0) {
+          await pool.query(
+            `INSERT INTO lessons
+              (skill_id, title, description, content, duration_minutes, difficulty_level, status)
+             VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7)`,
+            [skill.rows[0].id,
+              'Fractions: Parts of a Whole and Equivalent Forms',
+              'Build fraction sense with equivalent forms, fraction operations, and decimal connections.',
+              JSON.stringify(lessonContent), 18, 'beginner', 'published']
+          );
+        }
+      }
     }
     
     logger.info('✅ Database seeding completed successfully');

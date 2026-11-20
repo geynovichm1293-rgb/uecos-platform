@@ -24,7 +24,9 @@ export async function getLesson(lessonId, learnerId) {
     );
     
     if (lessonResult.rows.length === 0) {
-      throw new Error('Lesson not found');
+      const error = new Error('Lesson not found');
+      error.status = 404;
+      throw error;
     }
     
     const lesson = lessonResult.rows[0];

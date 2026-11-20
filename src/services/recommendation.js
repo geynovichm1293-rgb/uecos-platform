@@ -24,7 +24,28 @@ export async function getNextRecommendation(learnerId, subjectId) {
          AND s.status = 'published'
          AND l.status = 'published'
          AND (p.id IS NULL OR p.status != 'completed')
-       ORDER BY t.id, s.difficulty_level, l.id
+       ORDER BY
+         CASE lp.starting_level
+           WHEN 'LIKELY_MASTERED' THEN
+             CASE LOWER(COALESCE(l.difficulty_level, 'beginner'))
+               WHEN 'advanced' THEN 0 WHEN 'hard' THEN 0
+               WHEN 'intermediate' THEN 1 WHEN 'medium' THEN 1
+               ELSE 2
+             END
+           WHEN 'PRACTICING' THEN
+             CASE LOWER(COALESCE(l.difficulty_level, 'beginner'))
+               WHEN 'intermediate' THEN 0 WHEN 'medium' THEN 0
+               WHEN 'advanced' THEN 1 WHEN 'hard' THEN 1
+               ELSE 2
+             END
+           ELSE
+             CASE LOWER(COALESCE(l.difficulty_level, 'beginner'))
+               WHEN 'beginner' THEN 0 WHEN 'easy' THEN 0
+               WHEN 'intermediate' THEN 1 WHEN 'medium' THEN 1
+               ELSE 2
+             END
+         END,
+         t.id, s.difficulty_level, l.id
        LIMIT 1`,
       [learnerId, subjectId]
     );

@@ -280,15 +280,26 @@ test.describe('E2E: Complete Learning Journey', () => {
   });
 
   test.it('Step 8: Diagnostic scoring ignores client correctness flags', async () => {
+    const knownAnswers = ['12', '17', '8'];
     const responses = diagnosticQuestionIds.map((questionId, index) => ({
       questionId,
-      answer: index === 0 ? '12' : 'not-the-answer',
+      answer: index < knownAnswers.length ? knownAnswers[index] : 'not-the-answer',
       // Deliberately lie in both directions; the server must grade the submitted answer.
-      isCorrect: index !== 0
+      isCorrect: index >= knownAnswers.length
     }));
     const response = await client.post(`/api/learner/assessment/${assessmentId}/submit`, { responses });
     assert.equal(response.status, 200);
-    assert.equal(response.data.score, 10);
+    assert.equal(response.data.score, 30);
+
+    const pathLevel = await testPool.query(
+      `SELECT starting_level
+       FROM learning_paths
+       WHERE learner_id = (SELECT id FROM learners WHERE user_id = $1)
+         AND subject_id = $2
+         AND status = 'active'`,
+      [userId, subjectId]
+    );
+    assert.equal(pathLevel.rows[0].starting_level, 'INTRODUCED');
   });
 
   test.it('Step 9: Completed assessments cannot be submitted again', async () => {

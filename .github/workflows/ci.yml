@@ -102,10 +102,17 @@ jobs:
                  WHERE t.name = 'Geometry Basics' AND sk.name = 'Shape Properties and Measurement') AS geometry_skills,
                 (SELECT COUNT(*)::integer FROM lessons l JOIN skills sk ON sk.id = l.skill_id
                  WHERE sk.name = 'Shape Properties and Measurement'
-                   AND l.title = 'Geometry: Shape Properties, Perimeter, and Area') AS geometry_lessons
+                   AND l.title = 'Geometry: Shape Properties, Perimeter, and Area') AS geometry_lessons,
+                (SELECT COUNT(*)::integer FROM topics t JOIN subjects s ON s.id = t.subject_id
+                 WHERE s.name = 'Mathematics' AND t.name = 'Algebra Fundamentals') AS algebra_topics,
+                (SELECT COUNT(*)::integer FROM skills sk JOIN topics t ON t.id = sk.topic_id
+                 WHERE t.name = 'Algebra Fundamentals' AND sk.name = 'Variables and One-Step Equations') AS algebra_skills,
+                (SELECT COUNT(*)::integer FROM lessons l JOIN skills sk ON sk.id = l.skill_id
+                 WHERE sk.name = 'Variables and One-Step Equations'
+                   AND l.title = 'Algebra: Variables and One- and Two-Step Equations') AS algebra_lessons
             `);
             const counts = result.rows[0];
-            if (counts.topics !== 1 || counts.skills !== 1 || counts.lessons !== 1 || counts.fractions_topics !== 1 || counts.fractions_skills !== 1 || counts.fractions_lessons !== 1 || counts.geometry_topics !== 1 || counts.geometry_skills !== 1 || counts.geometry_lessons !== 1) {
+            if (counts.topics !== 1 || counts.skills !== 1 || counts.lessons !== 1 || counts.fractions_topics !== 1 || counts.fractions_skills !== 1 || counts.fractions_lessons !== 1 || counts.geometry_topics !== 1 || counts.geometry_skills !== 1 || counts.geometry_lessons !== 1 || counts.algebra_topics !== 1 || counts.algebra_skills !== 1 || counts.algebra_lessons !== 1) {
               throw new Error(`Seed data is not idempotent: ${JSON.stringify(counts)}`);
             }
             process.stdout.write('Seed data is idempotent\\n');

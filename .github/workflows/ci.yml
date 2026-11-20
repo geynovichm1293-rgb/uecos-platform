@@ -95,10 +95,17 @@ jobs:
                  WHERE t.name = 'Fractions and Decimals' AND sk.name = 'Fraction Concepts and Equivalent Forms') AS fractions_skills,
                 (SELECT COUNT(*)::integer FROM lessons l JOIN skills sk ON sk.id = l.skill_id
                  WHERE sk.name = 'Fraction Concepts and Equivalent Forms'
-                   AND l.title = 'Fractions: Parts of a Whole and Equivalent Forms') AS fractions_lessons
+                   AND l.title = 'Fractions: Parts of a Whole and Equivalent Forms') AS fractions_lessons,
+                (SELECT COUNT(*)::integer FROM topics t JOIN subjects s ON s.id = t.subject_id
+                 WHERE s.name = 'Mathematics' AND t.name = 'Geometry Basics') AS geometry_topics,
+                (SELECT COUNT(*)::integer FROM skills sk JOIN topics t ON t.id = sk.topic_id
+                 WHERE t.name = 'Geometry Basics' AND sk.name = 'Shape Properties and Measurement') AS geometry_skills,
+                (SELECT COUNT(*)::integer FROM lessons l JOIN skills sk ON sk.id = l.skill_id
+                 WHERE sk.name = 'Shape Properties and Measurement'
+                   AND l.title = 'Geometry: Shape Properties, Perimeter, and Area') AS geometry_lessons
             `);
             const counts = result.rows[0];
-            if (counts.topics !== 1 || counts.skills !== 1 || counts.lessons !== 1 || counts.fractions_topics !== 1 || counts.fractions_skills !== 1 || counts.fractions_lessons !== 1) {
+            if (counts.topics !== 1 || counts.skills !== 1 || counts.lessons !== 1 || counts.fractions_topics !== 1 || counts.fractions_skills !== 1 || counts.fractions_lessons !== 1 || counts.geometry_topics !== 1 || counts.geometry_skills !== 1 || counts.geometry_lessons !== 1) {
               throw new Error(`Seed data is not idempotent: ${JSON.stringify(counts)}`);
             }
             process.stdout.write('Seed data is idempotent\\n');

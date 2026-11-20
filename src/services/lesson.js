@@ -253,7 +253,7 @@ export function gradeQuestion(question, submittedAnswer) {
     ? question.acceptedAnswers
     : [answerKey];
 
-  if (acceptedAnswers.length === 0 || acceptedAnswers.some(value => value === undefined || value === null)) {
+  if (acceptedAnswers.length === 0 || acceptedAnswers.some(value => value === undefined || value === null || String(value).trim() === '')) {
     const error = new Error('This question is not configured for server-side grading');
     error.status = 422;
     throw error;

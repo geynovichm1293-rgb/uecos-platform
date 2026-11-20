@@ -102,7 +102,7 @@ docker compose up --build
 
 # Option B: run Node locally, using the Compose PostgreSQL service
 docker compose up -d postgres
-npm install
+npm ci
 npm run migrate
 npm run seed
 npm run dev

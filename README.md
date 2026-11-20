@@ -259,7 +259,10 @@ npm start                           # Start the API server
 - JWT authentication, database-backed token revocation on logout, and role checks
 - Learner ownership checks for dashboards, progress, assessments, and analytics
 - Server-side lesson and diagnostic-assessment grading; answer keys are removed from learner-facing responses
-- Request validation, 1 MiB body limits, and PostgreSQL-backed login/registration rate limits
+- Lesson publishing quality gate: every graded question needs a unique ID, a meaningful prompt, a server-side answer key, and a learner-facing explanation
+- Learning paths are created transactionally, replace the prior active path for the same learner/subject, and include published content only
+- Progress summaries and next-lesson recommendations are scoped to active learner paths
+- Database-backed readiness checks, request validation, 1 MiB body limits, and PostgreSQL-backed login/registration rate limits
 - Parameterized SQL, serialized/transactional migrations, case-insensitive unique email addresses, and a non-superuser application database role in Docker Compose
 - Baseline security headers and HSTS on HTTPS requests
 - HMAC-hashed rate-limit identifiers; raw IP/email values are not stored in the rate-limit table

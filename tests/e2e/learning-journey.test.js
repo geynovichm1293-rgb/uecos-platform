@@ -234,10 +234,21 @@ test.describe('E2E: Complete Learning Journey', () => {
     assert.equal(active.rows[0].count, 1);
   });
 
-  test.it('Step 5: User views learning path', async () => {
-    // This would use the pathId from step 4
+  test.it('Step 5: User views active learning path and progress', async () => {
+    const activePath = await testPool.query(
+      `SELECT id FROM learning_paths
+       WHERE learner_id = (SELECT id FROM learners WHERE user_id = $1)
+         AND subject_id = $2 AND status = 'active'
+       ORDER BY id DESC LIMIT 1`,
+      [userId, subjectId]
+    );
+    assert.equal(activePath.rows.length, 1);
+    const pathResponse = await client.get(`/api/learner/path/${activePath.rows[0].id}`);
+    assert.equal(pathResponse.status, 200);
+    assert.ok(pathResponse.data.path);
+    assert.equal(pathResponse.data.path.starting_level, 'NOT_ASSESSED');
+
     const response = await client.get('/api/learner/progress');
-    
     assert.strictEqual(response.status, 200, 'Progress endpoint should return 200');
     assert.ok(response.data.overall, 'Should return progress data');
   });

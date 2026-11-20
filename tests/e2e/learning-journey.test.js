@@ -180,6 +180,25 @@ test.describe('E2E: Complete Learning Journey', () => {
     }
   });
 
+  test.it('Step 4f: Concurrent path replacements preserve the single-active-path rule', async () => {
+    const results = await Promise.all([
+      client.post('/api/learner/goal', { subjectId, goalDescription: 'Concurrent path request one' }),
+      client.post('/api/learner/goal', { subjectId, goalDescription: 'Concurrent path request two' })
+    ]);
+    assert.equal(results[0].status, 201);
+    assert.equal(results[1].status, 201);
+
+    const active = await testPool.query(
+      `SELECT COUNT(*)::integer AS count
+       FROM learning_paths
+       WHERE learner_id = (SELECT id FROM learners WHERE user_id = $1)
+         AND subject_id = $2
+         AND status = 'active'`,
+      [userId, subjectId]
+    );
+    assert.equal(active.rows[0].count, 1);
+  });
+
   test.it('Step 5: User views learning path', async () => {
     // This would use the pathId from step 4
     const response = await client.get('/api/learner/progress');

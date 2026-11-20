@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main, develop, security/rate-limit-auth-routes]
   pull_request:
     branches: [main, develop]
 

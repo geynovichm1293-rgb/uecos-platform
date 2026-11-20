@@ -37,24 +37,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: npm install
-      - name: Emit generated lockfile in retrievable chunks
-        run: |
-          node --input-type=module <<'NODE'
-          import { readFileSync } from 'node:fs';
-          const lock = JSON.stringify(JSON.parse(readFileSync('package-lock.json', 'utf8')));
-          const size = 5000;
-          for (let offset = 0, part = 0; offset < lock.length; offset += size, part += 1) {
-            console.log(`LOCKFILE_PART_${String(part).padStart(4, '0')}:${lock.slice(offset, offset + size)}`);
-          }
-          NODE
-      - name: Upload generated dependency lockfile for review
-        uses: actions/upload-artifact@v4
-        with:
-          name: generated-package-lock
-          path: package-lock.json
-          if-no-files-found: error
-          retention-days: 1
+      - run: npm ci
       - name: Create least-privileged application database role
         env:
           DATABASE_ADMIN_URL: postgresql://uecos_admin:uecos_admin_test_password@localhost:5432/uecos_test

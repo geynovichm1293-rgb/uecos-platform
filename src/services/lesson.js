@@ -65,7 +65,7 @@ export async function updateProgress(lessonId, learnerId, status, completionPerc
       `INSERT INTO progress (lesson_id, learner_id, status, completion_percentage, attempts)
        VALUES ($1, $2, $3, $4, 1)
        ON CONFLICT (lesson_id, learner_id)
-       DO UPDATE SET status = $3, completion_percentage = $4, attempts = attempts + 1, updated_at = CURRENT_TIMESTAMP
+       DO UPDATE SET status = EXCLUDED.status, completion_percentage = EXCLUDED.completion_percentage, attempts = progress.attempts + 1, updated_at = CURRENT_TIMESTAMP
        RETURNING *`,
       [lessonId, learnerId, status, completionPercentage]
     );

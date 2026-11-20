@@ -24,6 +24,7 @@ let userId = null;
 let subjectId = null;
 let topicId = null;
 let assessmentId = null;
+let diagnosticQuestionIds = [];
 let lessonId = null;
 let pathId = null;
 
@@ -264,28 +265,29 @@ test.describe('E2E: Complete Learning Journey', () => {
     const response = await client.post('/api/learner/assessment/diagnostic', { topicId });
     assert.strictEqual(response.status, 201);
     assessmentId = response.data.assessmentId;
+    assert.equal(response.data.questions.length, 10);
     assert.equal(response.data.questions[0].correctAnswer, undefined);
     assert.equal(response.data.questions[1].correctAnswer, undefined);
+    diagnosticQuestionIds = response.data.questions.map(question => question.id);
+    assert.ok(diagnosticQuestionIds.every(id => typeof id === 'string'));
   });
 
   test.it('Step 8: Diagnostic scoring ignores client correctness flags', async () => {
-    const response = await client.post(`/api/learner/assessment/${assessmentId}/submit`, {
-      responses: [
-        { questionId: 1, answer: '3', isCorrect: true },
-        { questionId: 2, answer: '5', isCorrect: false }
-      ]
-    });
+    const responses = diagnosticQuestionIds.map((questionId, index) => ({
+      questionId,
+      answer: index === 0 ? '12' : 'not-the-answer',
+      // Deliberately lie in both directions; the server must grade the submitted answer.
+      isCorrect: index !== 0
+    }));
+    const response = await client.post(`/api/learner/assessment/${assessmentId}/submit`, { responses });
     assert.equal(response.status, 200);
-    assert.equal(response.data.score, 50);
+    assert.equal(response.data.score, 10);
   });
 
   test.it('Step 9: Completed assessments cannot be submitted again', async () => {
     try {
       await client.post(`/api/learner/assessment/${assessmentId}/submit`, {
-        responses: [
-          { questionId: 1, answer: '4' },
-          { questionId: 2, answer: '5' }
-        ]
+        responses: diagnosticQuestionIds.map(questionId => ({ questionId, answer: '0' }))
       });
       assert.fail('A completed assessment must not be resubmittable');
     } catch (error) {

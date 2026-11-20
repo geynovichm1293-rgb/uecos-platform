@@ -125,8 +125,8 @@ export async function getLearningPath(pathId, learnerId) {
               COUNT(l.id) as lesson_count,
               COUNT(CASE WHEN p.status = 'completed' THEN 1 END) as completed_lessons
        FROM topics t
-       LEFT JOIN skills s ON t.id = s.topic_id
-       LEFT JOIN lessons l ON s.id = l.skill_id
+       LEFT JOIN skills s ON t.id = s.topic_id AND s.status = 'published'
+       LEFT JOIN lessons l ON s.id = l.skill_id AND l.status = 'published'
        LEFT JOIN progress p ON l.id = p.lesson_id AND p.learner_id = $1
        WHERE t.subject_id = $2
          AND t.status = 'published'

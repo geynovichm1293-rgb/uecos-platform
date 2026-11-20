@@ -10,6 +10,10 @@ RUN npm install --omit=dev
 COPY src/ ./src/
 
 ENV NODE_ENV=production
+
+# Run the application as the unprivileged Node.js user.
+USER node
+
 EXPOSE 3000
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \

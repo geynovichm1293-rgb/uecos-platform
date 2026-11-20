@@ -107,7 +107,7 @@ export function gradeAssessmentResponses(questions, responses) {
 
     const key = question.correctAnswer ?? question.correctOptionId ?? question.answerKey;
     const accepted = Array.isArray(question.acceptedAnswers) ? question.acceptedAnswers : [key];
-    if (accepted.length === 0 || accepted.some(value => value === undefined || value === null)) {
+    if (accepted.length === 0 || accepted.some(value => value === undefined || value === null || String(value).trim() === '')) {
       const error = new Error('Assessment contains a question without a server-side answer key');
       error.status = 422;
       throw error;

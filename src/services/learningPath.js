@@ -164,39 +164,3 @@ export async function getLearningPath(pathId, learnerId) {
     throw error;
   }
 }
-
-/**
- * Filter content based on learner level
- */
-function filterContentByLevel(content, level) {
-  const levelPriority = {
-    'NOT_ASSESSED': 0,
-    'INTRODUCED': 1,
-    'DEVELOPING': 2,
-    'PRACTICING': 3,
-    'LIKELY_MASTERED': 4
-  };
-  
-  // Start with topics below or at learner's current level
-  const filteredByTopic = {};
-  
-  content.forEach(row => {
-    if (!filteredByTopic[row.id]) {
-      filteredByTopic[row.id] = {
-        id: row.id,
-        name: row.name,
-        skills: []
-      };
-    }
-    
-    if (row.skill_id) {
-      filteredByTopic[row.id].skills.push({
-        id: row.skill_id,
-        name: row.skill_name,
-        difficulty: row.difficulty_level
-      });
-    }
-  });
-  
-  return Object.values(filteredByTopic);
-}

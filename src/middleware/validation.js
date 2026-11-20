@@ -22,7 +22,7 @@ const schemas = {
   }),
   
   answer: Joi.object({
-    questionId: Joi.number().integer().positive().required(),
+    questionId: Joi.alternatives().try(Joi.number().integer().positive(), Joi.string().trim().min(1).max(100)).required(),
     answer: Joi.string().max(5000).required()
   }),
   diagnostic: Joi.object({

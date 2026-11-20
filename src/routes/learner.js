@@ -114,7 +114,7 @@ router.post('/lesson/:lessonId/answer', authenticate, validate('answer'), asyncH
 
   logger.info('Lesson answer submitted', { lessonId, learnerId, questionId });
 
-  const feedback = await evaluateLessonAnswer(lessonId, questionId, answer);
+  const feedback = await evaluateLessonAnswer(lessonId, learnerId, questionId, answer);
   const completion = feedback.isCorrect ? 100 : 50;
   await updateProgress(lessonId, learnerId, 'in_progress', completion);
 

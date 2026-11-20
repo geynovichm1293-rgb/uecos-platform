@@ -10,8 +10,17 @@ export async function getLesson(lessonId, learnerId) {
   try {
     // Get lesson
     const lessonResult = await pool.query(
-      "SELECT * FROM lessons WHERE id = $1 AND status = 'published',"
-      [lessonId]
+      `SELECT l.*
+       FROM lessons l
+       JOIN skills s ON s.id = l.skill_id
+       JOIN topics t ON t.id = s.topic_id
+       JOIN learning_paths lp
+         ON lp.subject_id = t.subject_id
+        AND lp.learner_id = $2
+        AND lp.status = 'active'
+       WHERE l.id = $1 AND l.status = 'published'
+       LIMIT 1`,
+      [lessonId, learnerId]
     );
     
     if (lessonResult.rows.length === 0) {
@@ -71,6 +80,27 @@ export async function updateProgress(lessonId, learnerId, status, completionPerc
  * Complete lesson (mark as completed)
  */
 export async function completeLesson(lessonId, learnerId) {
+  const pool = getPool();
+  const access = await pool.query(
+    `SELECT 1
+     FROM lessons l
+     JOIN skills s ON s.id = l.skill_id
+     JOIN topics t ON t.id = s.topic_id
+     JOIN learning_paths lp
+       ON lp.subject_id = t.subject_id
+      AND lp.learner_id = $2
+      AND lp.status = 'active'
+     WHERE l.id = $1 AND l.status = 'published'
+     LIMIT 1`,
+    [lessonId, learnerId]
+  );
+
+  if (access.rows.length === 0) {
+    const error = new Error('Lesson not found in an active learning path');
+    error.status = 404;
+    throw error;
+  }
+
   return updateProgress(lessonId, learnerId, 'completed', 100);
 }
 
@@ -108,11 +138,20 @@ function normalizeAnswer(answer) {
  * Grade a lesson answer using the answer key stored in the database.
  * Client-provided correctness flags or answer keys are never accepted.
  */
-export async function evaluateLessonAnswer(lessonId, questionId, submittedAnswer) {
+export async function evaluateLessonAnswer(lessonId, learnerId, questionId, submittedAnswer) {
   const pool = getPool();
   const result = await pool.query(
-    "SELECT content FROM lessons WHERE id = $1 AND status = 'published'",
-    [lessonId]
+    `SELECT l.content
+     FROM lessons l
+     JOIN skills s ON s.id = l.skill_id
+     JOIN topics t ON t.id = s.topic_id
+     JOIN learning_paths lp
+       ON lp.subject_id = t.subject_id
+      AND lp.learner_id = $2
+      AND lp.status = 'active'
+     WHERE l.id = $1 AND l.status = 'published'
+     LIMIT 1`,
+    [lessonId, learnerId]
   );
 
   if (result.rows.length === 0) {

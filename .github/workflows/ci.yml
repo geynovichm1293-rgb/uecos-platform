@@ -67,6 +67,38 @@ jobs:
           SEED_ADMIN_EMAIL: admin@example.com
           SEED_ADMIN_PASSWORD: TestAdminPassword123!
         run: npm run seed
+      - name: Verify seed operation is idempotent
+        env:
+          DATABASE_URL: postgresql://uecos_app:uecos_test_app_password@localhost:5432/uecos_test
+          JWT_SECRET: test-only-secret-for-ci-at-least-32-characters
+          NODE_ENV: test
+          SEED_ADMIN_EMAIL: admin@example.com
+          SEED_ADMIN_PASSWORD: TestAdminPassword123!
+        run: |
+          npm run seed
+          node --input-type=module <<'NODE'
+          import pg from 'pg';
+          const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
+          try {
+            const result = await pool.query(`
+              SELECT
+                (SELECT COUNT(*)::integer FROM topics t JOIN subjects s ON s.id = t.subject_id
+                 WHERE s.name = 'Mathematics' AND t.name = 'Arithmetic Fundamentals') AS topics,
+                (SELECT COUNT(*)::integer FROM skills sk JOIN topics t ON t.id = sk.topic_id
+                 WHERE t.name = 'Arithmetic Fundamentals' AND sk.name = 'Addition and Subtraction Foundations') AS skills,
+                (SELECT COUNT(*)::integer FROM lessons l JOIN skills sk ON sk.id = l.skill_id
+                 WHERE sk.name = 'Addition and Subtraction Foundations'
+                   AND l.title = 'Addition and Subtraction: Combining and Comparing Quantities') AS lessons
+            `);
+            const counts = result.rows[0];
+            if (counts.topics !== 1 || counts.skills !== 1 || counts.lessons !== 1) {
+              throw new Error(`Seed data is not idempotent: ${JSON.stringify(counts)}`);
+            }
+            process.stdout.write('Seed data is idempotent\\n');
+          } finally {
+            await pool.end();
+          }
+          NODE
       - name: Start API server
         env:
           DATABASE_URL: postgresql://uecos_app:uecos_test_app_password@localhost:5432/uecos_test

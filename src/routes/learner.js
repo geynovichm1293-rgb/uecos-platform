@@ -219,19 +219,25 @@ router.post('/assessment/diagnostic', authenticate, validate('diagnostic'), asyn
   );
 
   const diagnosticQuestions = [];
+  const seenQuestionIds = new Set();
   for (const row of lessonRows.rows) {
     const content = typeof row.content === 'string' ? JSON.parse(row.content) : row.content;
     for (const question of (Array.isArray(content?.questions) ? content.questions : [])) {
       const answerKey = question.correctAnswer ?? question.correctOptionId ?? question.answerKey;
       const acceptedAnswers = Array.isArray(question.acceptedAnswers) ? question.acceptedAnswers : [answerKey];
-      if (question.id === undefined || acceptedAnswers.length === 0 ||
+      const questionId = `${row.lesson_id}:${question.id}`;
+      const prompt = question.prompt ?? question.text;
+      if (question.id === undefined || seenQuestionIds.has(questionId) ||
+          typeof prompt !== 'string' || prompt.trim().length < 5 ||
+          acceptedAnswers.length === 0 ||
           acceptedAnswers.some(value => value === undefined || value === null || String(value).trim() === '')) {
         continue;
       }
+      seenQuestionIds.add(questionId);
       diagnosticQuestions.push({
         ...question,
-        id: `${row.lesson_id}:${question.id}`,
-        prompt: question.prompt ?? question.text
+        id: questionId,
+        prompt
       });
     }
   }

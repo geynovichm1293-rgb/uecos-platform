@@ -38,6 +38,13 @@ jobs:
         with:
           node-version: 22
       - run: npm install
+      - name: Upload generated dependency lockfile for review
+        uses: actions/upload-artifact@v4
+        with:
+          name: generated-package-lock
+          path: package-lock.json
+          if-no-files-found: error
+          retention-days: 1
       - name: Create least-privileged application database role
         env:
           DATABASE_ADMIN_URL: postgresql://uecos_admin:uecos_admin_test_password@localhost:5432/uecos_test

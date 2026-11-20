@@ -485,6 +485,108 @@ async function seedDatabase() {
           );
         }
       }
+
+      // Seed a fourth starter slice for introductory algebra.
+      const algebraTopic = await pool.query(
+        'SELECT id FROM topics WHERE subject_id = $1 AND name = $2 AND status = $3',
+        [mathSubjectId, 'Algebra Fundamentals', 'published']
+      );
+      if (algebraTopic.rows.length > 0) {
+        const topicId = algebraTopic.rows[0].id;
+        let skill = await pool.query(
+          'SELECT id FROM skills WHERE topic_id = $1 AND name = $2 LIMIT 1',
+          [topicId, 'Variables and One-Step Equations']
+        );
+        if (skill.rows.length === 0) {
+          skill = await pool.query(
+            `INSERT INTO skills (topic_id, name, description, difficulty_level, status)
+             VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+            [topicId, 'Variables and One-Step Equations',
+              'Understand variables, write simple expressions, and solve one-step and introductory two-step equations.',
+              'beginner', 'published']
+          );
+        }
+
+        const lessonContent = {
+          overview: 'Use variables to represent unknown values and solve equations by keeping both sides balanced.',
+          learningObjectives: [
+            'Explain what a variable represents in an expression or equation',
+            'Translate simple verbal descriptions into algebraic expressions',
+            'Solve one-step addition, subtraction, multiplication, and division equations',
+            'Solve introductory two-step equations using inverse operations'
+          ],
+          sections: [
+            {
+              title: 'Variables represent values',
+              body: 'A variable is a letter or symbol that stands for a number. An expression such as x + 3 describes a value that depends on x.'
+            },
+            {
+              title: 'Equations express equality',
+              body: 'An equation says that two expressions have the same value. The equals sign means both sides are balanced, not that the answer comes next.'
+            },
+            {
+              title: 'Use inverse operations',
+              body: 'Addition and subtraction undo each other. Multiplication and division undo each other. Apply the same operation to both sides to keep an equation balanced.'
+            },
+            {
+              title: 'Translate words into expressions',
+              body: 'More than usually signals addition, less than signals subtraction, twice means multiply by 2, and a quotient describes division. Define the variable before writing the expression.'
+            }
+          ],
+          workedExamples: [
+            {
+              prompt: 'Solve x + 4 = 11.',
+              solution: 'Subtract 4 from both sides: x = 11 - 4 = 7. Check: 7 + 4 = 11.'
+            },
+            {
+              prompt: 'Solve 2y + 3 = 13.',
+              solution: 'Subtract 3 from both sides to get 2y = 10. Divide both sides by 2, so y = 5.'
+            }
+          ],
+          questions: [
+            { id: 'alg-01', prompt: 'Solve x + 3 = 8.', correctAnswer: '5', explanation: 'Subtract 3 from both sides: x = 8 - 3 = 5.' },
+            { id: 'alg-02', prompt: 'Solve y - 4 = 6.', correctAnswer: '10', explanation: 'Add 4 to both sides: y = 6 + 4 = 10.' },
+            { id: 'alg-03', prompt: 'Solve 2a = 14.', correctAnswer: '7', explanation: 'Divide both sides by 2: a = 14 ÷ 2 = 7.' },
+            { id: 'alg-04', prompt: 'Solve b/3 = 5.', correctAnswer: '15', explanation: 'Multiply both sides by 3: b = 5 × 3 = 15.' },
+            { id: 'alg-05', prompt: 'Solve n + 9 = 12.', correctAnswer: '3', explanation: 'Subtract 9 from both sides: n = 12 - 9 = 3.' },
+            { id: 'alg-06', prompt: 'Solve 18 - c = 11.', correctAnswer: '7', explanation: 'Subtract 11 from 18 to find c: c = 7. Check: 18 - 7 = 11.' },
+            { id: 'alg-07', prompt: 'Solve 4x = 28.', correctAnswer: '7', explanation: 'Divide both sides by 4: x = 28 ÷ 4 = 7.' },
+            { id: 'alg-08', prompt: 'Solve p/5 = 4.', correctAnswer: '20', explanation: 'Multiply both sides by 5: p = 4 × 5 = 20.' },
+            { id: 'alg-09', prompt: 'Solve 2x + 3 = 11.', correctAnswer: '4', explanation: 'Subtract 3 to get 2x = 8, then divide by 2 to get x = 4.' },
+            { id: 'alg-10', prompt: 'Solve 3y - 2 = 13.', correctAnswer: '5', explanation: 'Add 2 to get 3y = 15, then divide by 3 to get y = 5.' },
+            { id: 'alg-11', prompt: 'Solve 5 + x = 14.', correctAnswer: '9', explanation: 'Subtract 5 from both sides: x = 14 - 5 = 9.' },
+            { id: 'alg-12', prompt: 'Solve x/4 + 2 = 5.', correctAnswer: '12', explanation: 'Subtract 2 to get x/4 = 3, then multiply by 4 to get x = 12.' },
+            { id: 'alg-13', prompt: 'Solve 2(a + 3) = 14.', correctAnswer: '4', explanation: 'Divide both sides by 2 to get a + 3 = 7, then subtract 3 to get a = 4.' },
+            { id: 'alg-14', prompt: 'Solve 3x + 6 = 21.', correctAnswer: '5', explanation: 'Subtract 6 to get 3x = 15, then divide by 3 to get x = 5.' },
+            { id: 'alg-15', prompt: 'Solve 20 - 2m = 8.', correctAnswer: '6', explanation: 'Subtract 20 from both sides to get -2m = -12, then divide by -2 to get m = 6.' },
+            { id: 'alg-16', prompt: 'Solve 7n = 49.', correctAnswer: '7', explanation: 'Divide both sides by 7: n = 49 ÷ 7 = 7.' },
+            { id: 'alg-17', prompt: 'If x = 3, what is the value of 2x + 5?', correctAnswer: '11', explanation: 'Substitute 3 for x: 2(3) + 5 = 6 + 5 = 11.' },
+            { id: 'alg-18', prompt: 'If y = 4, what is the value of y squared plus 1?', correctAnswer: '17', explanation: 'Substitute 4 for y: 4² + 1 = 16 + 1 = 17.' },
+            { id: 'alg-19', prompt: 'Write an algebraic expression for five more than t.', acceptedAnswers: ['t + 5', '5 + t'], explanation: 'Five more than t means add 5 to t. Addition can be written in either order.' },
+            { id: 'alg-20', prompt: 'Write an algebraic expression for twice a number n, decreased by 3.', correctAnswer: '2n - 3', explanation: 'Twice n is 2n. Decreased by 3 means subtract 3, giving 2n - 3.' }
+          ]
+        };
+        const qualityErrors = validateLessonForPublishing(lessonContent);
+        if (qualityErrors.length > 0) {
+          throw new Error(`Seed algebra lesson failed publishing quality checks: ${qualityErrors.join('; ')}`);
+        }
+
+        const existingLesson = await pool.query(
+          'SELECT id FROM lessons WHERE skill_id = $1 AND title = $2 LIMIT 1',
+          [skill.rows[0].id, 'Algebra: Variables and One- and Two-Step Equations']
+        );
+        if (existingLesson.rows.length === 0) {
+          await pool.query(
+            `INSERT INTO lessons
+              (skill_id, title, description, content, duration_minutes, difficulty_level, status)
+             VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7)`,
+            [skill.rows[0].id,
+              'Algebra: Variables and One- and Two-Step Equations',
+              'Use variables and inverse operations to solve introductory algebra problems.',
+              JSON.stringify(lessonContent), 20, 'beginner', 'published']
+          );
+        }
+      }
     }
     
     logger.info('✅ Database seeding completed successfully');

@@ -77,6 +77,13 @@ export async function getSkillProgress(learnerId, subjectId) {
        WHERE s.topic_id IN (
          SELECT id FROM topics WHERE subject_id = $2
        )
+         AND EXISTS (
+           SELECT 1
+           FROM learning_paths lp
+           WHERE lp.learner_id = $1
+             AND lp.subject_id = $2
+             AND lp.status = 'active'
+         )
        GROUP BY s.id, s.name
        ORDER BY s.id`,
       [learnerId, subjectId]

@@ -8,7 +8,12 @@ if (!JWT_SECRET || JWT_SECRET.length < 32) {
   throw new Error('JWT_SECRET must be configured with at least 32 characters before the server can start.');
 }
 const JWT_EXPIRY = process.env.JWT_EXPIRY || '24h';
-const BCRYPT_ROUNDS = parseInt(process.env.BCRYPT_ROUNDS) || 12;
+const BCRYPT_ROUNDS = process.env.BCRYPT_ROUNDS === undefined
+  ? 12
+  : Number(process.env.BCRYPT_ROUNDS);
+if (!Number.isInteger(BCRYPT_ROUNDS) || BCRYPT_ROUNDS < 10 || BCRYPT_ROUNDS > 14) {
+  throw new Error('BCRYPT_ROUNDS must be an integer between 10 and 14.');
+}
 
 /**
  * Hash password with bcrypt
@@ -27,9 +32,9 @@ export async function comparePassword(password, hash) {
 /**
  * Create JWT token
  */
-export function createToken(userId, role) {
+export function createToken(userId, role, tokenVersion = 0) {
   return jwt.sign(
-    { userId, role, iat: Math.floor(Date.now() / 1000) },
+    { userId, role, tokenVersion, iat: Math.floor(Date.now() / 1000) },
     JWT_SECRET,
     { expiresIn: JWT_EXPIRY, algorithm: 'HS256' }
   );
@@ -56,7 +61,7 @@ export async function registerUser(email, password, role = 'learner') {
   try {
     // Check if user exists
     const existingUser = await pool.query(
-      'SELECT id FROM users WHERE email = $1',
+      'SELECT id FROM users WHERE LOWER(email) = LOWER($1)',
       [email]
     );
     
@@ -76,11 +81,11 @@ export async function registerUser(email, password, role = 'learner') {
     );
     
     const user = result.rows[0];
-    logger.info('✅ User registered successfully', { userId: user.id, email: user.email });
+    logger.info('User registered successfully', { userId: user.id });
     
     return user;
   } catch (error) {
-    logger.error('❌ User registration failed', { email, error: error.message });
+    logger.error('User registration failed', { error: error.message });
     throw error;
   }
 }
@@ -94,7 +99,7 @@ export async function authenticateUser(email, password) {
   try {
     // Find user
     const result = await pool.query(
-      'SELECT id, email, password_hash, role FROM users WHERE email = $1',
+      'SELECT id, email, password_hash, role, token_version FROM users WHERE LOWER(email) = LOWER($1)',
       [email]
     );
     
@@ -116,9 +121,9 @@ export async function authenticateUser(email, password) {
     }
     
     // Generate token
-    const token = createToken(user.id, user.role);
+    const token = createToken(user.id, user.role, user.token_version ?? 0);
     
-    logger.info('🔐 User authenticated successfully', { userId: user.id, email: user.email });
+    logger.info('User authenticated successfully', { userId: user.id });
     
     return {
       id: user.id,
@@ -127,7 +132,7 @@ export async function authenticateUser(email, password) {
       token
     };
   } catch (error) {
-    logger.error('❌ Authentication failed', { email, error: error.message });
+    logger.error('Authentication failed', { error: error.message });
     throw error;
   }
 }
@@ -139,7 +144,7 @@ export async function getUserById(userId) {
   const pool = getPool();
   
   const result = await pool.query(
-    'SELECT id, email, role, status, created_at FROM users WHERE id = $1',
+    'SELECT id, email, role, status, token_version, created_at FROM users WHERE id = $1',
     [userId]
   );
   
@@ -180,4 +185,61 @@ export async function getLearnerProfile(userId) {
   );
   
   return result.rows[0] || null;
+}
+
+/**
+ * Invalidate all previously issued access tokens for this account.
+ * A version bump makes every older JWT fail authentication.
+ */
+export async function revokeUserTokens(userId) {
+  const pool = getPool();
+  const result = await pool.query(
+    'UPDATE users SET token_version = token_version + 1, updated_at = CURRENT_TIMESTAMP WHERE id = $1 RETURNING token_version',
+    [userId]
+  );
+  return result.rows[0]?.token_version ?? null;
+}
+
+/**
+ * Atomically create a learner account and profile.
+ * Duplicate-email races are mapped to a safe 409 response.
+ */
+export async function registerLearnerAccount(email, password, profile = {}) {
+  const pool = getPool();
+  const passwordHash = await hashPassword(password);
+  const client = await pool.connect();
+
+  try {
+    await client.query('BEGIN');
+    const userResult = await client.query(
+      'INSERT INTO users (email, password_hash, role, status) VALUES ($1, $2, $3, $4) RETURNING id, email, role',
+      [email, passwordHash, 'learner', 'active']
+    );
+    const user = userResult.rows[0];
+
+    const learnerResult = await client.query(
+      `INSERT INTO learners (user_id, first_name, last_name, age, grade_level, learning_preferences, accessibility_settings)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       RETURNING id, user_id, first_name, last_name, age, grade_level`,
+      [user.id, profile.firstName ?? null, profile.lastName ?? null,
+       profile.age ?? null, profile.gradeLevel ?? null, '{}', '{}']
+    );
+
+    await client.query('COMMIT');
+    logger.info('Learner account registered atomically', { userId: user.id });
+    return { user, learner: learnerResult.rows[0] };
+  } catch (error) {
+    try { await client.query('ROLLBACK'); } catch (rollbackError) {
+      logger.error('Registration rollback failed', { error: rollbackError.message });
+    }
+    if (error.code === '23505') {
+      const conflict = new Error('User with this email already exists');
+      conflict.status = 409;
+      throw conflict;
+    }
+    logger.error('Atomic registration failed', { error: error.message });
+    throw error;
+  } finally {
+    client.release();
+  }
 }

@@ -20,12 +20,19 @@ export async function getLearnerProgress(learnerId, subjectId = null) {
       JOIN skills s ON l.skill_id = s.id
       JOIN topics t ON s.topic_id = t.id
       LEFT JOIN progress p ON l.id = p.lesson_id AND p.learner_id = $1
+      WHERE EXISTS (
+        SELECT 1
+        FROM learning_paths lp
+        WHERE lp.learner_id = $1
+          AND lp.subject_id = t.subject_id
+          AND lp.status = 'active'
+      )
     `;
     
     const params = [learnerId];
     
     if (subjectId) {
-      query += ' WHERE t.subject_id = $2';
+      query += ' AND t.subject_id = $2';
       params.push(subjectId);
     }
     
@@ -70,6 +77,13 @@ export async function getSkillProgress(learnerId, subjectId) {
        WHERE s.topic_id IN (
          SELECT id FROM topics WHERE subject_id = $2
        )
+         AND EXISTS (
+           SELECT 1
+           FROM learning_paths lp
+           WHERE lp.learner_id = $1
+             AND lp.subject_id = $2
+             AND lp.status = 'active'
+         )
        GROUP BY s.id, s.name
        ORDER BY s.id`,
       [learnerId, subjectId]

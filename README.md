@@ -57,21 +57,23 @@ uecos-platform/
 │   ├── middleware/            # Express middleware
 │   │   ├── errorHandler.js
 │   │   ├── auth.js
+│   │   ├── rateLimit.js
+│   │   ├── securityHeaders.js
 │   │   └── validation.js
 │   ├── routes/                # API routes
 │   │   ├── auth.js
 │   │   ├── learner.js
 │   │   ├── content.js
 │   │   └── analytics.js
-│   ├── services/              # Business logic
+│   ├── services/              # Business logic and grading
 │   │   ├── learningPath.js
 │   │   ├── assessment.js
-│   │   ├── recommendation.js
-│   │   └── feedback.js
+│   │   ├── lesson.js
+│   │   ├── auth.js
+│   │   └── tokenVersion.js
 │   ├── models/                # Data models
 │   └── utils/                 # Utilities
 │       └── logger.js
-├── scripts/                   # Automation scripts
 ├── tests/                     # Test files
 ├── .env.example               # Environment template
 └── package.json               # Dependencies
@@ -80,7 +82,7 @@ uecos-platform/
 ## Getting Started
 
 ### Prerequisites
-- Node.js 18+
+- Node.js 22+
 - PostgreSQL 12+
 - npm or yarn
 
@@ -91,20 +93,18 @@ uecos-platform/
 git clone https://github.com/geynovichm1293-rgb/uecos-platform.git
 cd uecos-platform
 
-# Install dependencies
-npm install
-
-# Setup environment
+# Configure local secrets and database passwords
 cp .env.example .env
-# Edit .env with your database credentials
+# Replace all example passwords and JWT_SECRET before starting.
 
-# Run migrations
+# Option A: run the full stack with Docker
+docker compose up --build
+
+# Option B: run Node locally, using the Compose PostgreSQL service
+docker compose up -d postgres
+npm ci
 npm run migrate
-
-# Seed initial data (optional)
 npm run seed
-
-# Start development server
 npm run dev
 ```
 
@@ -116,22 +116,22 @@ Server runs on `http://localhost:3000`
 
 ```bash
 # Development
-npm run dev              # Run with file watching
+npm run dev                         # Run with file watching
 
 # Testing
-npm test                 # Run all tests
-npm run test:watch      # Watch mode
-npm run test:security   # Security tests
-npm run test:accessibility # Accessibility tests
+npm test                            # Run the complete test suite
+npm run test:watch                  # Run tests in watch mode
 
 # Database
-npm run migrate         # Run migrations
-npm run migrate:rollback # Rollback last migration
-npm run seed            # Seed development data
+npm run migrate                     # Apply database migrations
+npm run seed                        # Seed sample subjects and topics
+
+# Dependency security
+npm audit --omit=dev --audit-level=high
 
 # Production
-npm run build           # Build for production
-npm start               # Start production server
+npm start                           # Start the API server
+# There is no separate JavaScript build step; the Docker image is the production artifact.
 ```
 
 ## API Endpoints
@@ -157,7 +157,7 @@ npm start               # Start production server
 - `POST /api/content/admin/publish/:lessonId` - Publish lesson
 
 ### Analytics
-- `POST /api/analytics/event` - Track event
+- `POST /api/analytics/event` - Accept an event payload (currently not persisted)
 - `GET /api/analytics/learner/:learnerId` - Get learner analytics
 
 ## Build Pipeline
@@ -168,11 +168,11 @@ npm start               # Start production server
 - [x] Create basic API structure
 - [ ] Review existing implementations
 
-### Phase 2: Core Architecture (🔄 In Progress)
-- [ ] Authentication system
-- [ ] Authorization/permissions
-- [ ] User roles & management
-- [ ] Learner profiles
+### Phase 2: Core Architecture (security implementation in review)
+- [x] JWT authentication and token-version logout revocation
+- [x] Role authorization and learner ownership checks
+- [x] Learner profile identity mapping
+- [x] Request validation and authentication rate limiting
 
 ### Phase 3: Learning Loop
 - [ ] Assessment engine
@@ -188,10 +188,10 @@ npm start               # Start production server
 - [ ] Quality gates
 
 ### Phase 5: Quality & Security
-- [ ] Unit tests
-- [ ] Integration tests
-- [ ] E2E tests
-- [ ] Security audit
+- [x] Unit and service tests
+- [x] Database-backed integration tests
+- [x] End-to-end learning and security tests
+- [x] Security hardening changes (pending review/merge)
 - [ ] Accessibility review
 
 ### Phase 6: Deployment
@@ -255,25 +255,30 @@ npm start               # Start production server
 
 ## Security & Privacy
 
-### Protected Areas
-- ✅ Authentication & authorization
-- ✅ Session handling
-- ✅ Input validation
-- ✅ Secret management
-- ✅ Database permissions
-- ✅ CSRF protection
-- ✅ Rate limiting
-- ✅ File uploads
+### Implemented in the security review branch
+- JWT authentication, database-backed token revocation on logout, and role checks
+- Learner ownership checks for dashboards, progress, assessments, and analytics
+- Server-side lesson and diagnostic-assessment grading; answer keys are removed from learner-facing responses
+- Lesson publishing quality gate: every graded question needs a unique ID, a meaningful prompt, a server-side answer key, and a learner-facing explanation
+- Learning paths are created transactionally, replace the prior active path for the same learner/subject, and include published content only
+- Progress summaries and next-lesson recommendations are scoped to active learner paths
+- Database-backed readiness checks, request validation, 1 MiB body limits, and PostgreSQL-backed login/registration rate limits
+- Parameterized SQL, serialized/transactional migrations, case-insensitive unique email addresses, and a non-superuser application database role in Docker Compose; run the Docker application as the unprivileged Node.js user
+- Baseline security headers and HSTS on HTTPS requests
+- HMAC-hashed rate-limit identifiers; raw IP/email values are not stored in the rate-limit table
 
-### Environment Variables
-Never commit `.env` file. Use `.env.example` as template.
+### Configuration
+Never commit `.env`. Use `.env.example` as a template. Docker Compose creates a separate PostgreSQL administrator and non-superuser application role; the API connects as `APP_DB_USER`, not the database administrator. Configure distinct strong `POSTGRES_ADMIN_PASSWORD` and `APP_DB_PASSWORD` values, plus a random `JWT_SECRET` of at least 32 characters. If deployed behind a reverse proxy, set `TRUST_PROXY_HOPS` to the exact trusted proxy count; do not enable proxy trust blindly. Seed administrator credentials are optional and must be explicitly supplied through `SEED_ADMIN_EMAIL` and `SEED_ADMIN_PASSWORD`; there is no hard-coded default admin.
 
-### Data Lifecycle
-- Minimal data collection
-- Clear retention policies
-- Secure deletion procedures
-- Regular backups
-- Audit logging
+### Not yet production-ready
+- Parental consent, age assurance, and privacy/legal review for a platform intended for children and schools
+- Account email verification, password reset, and administrator MFA
+- Data export/deletion workflows, retention schedules, backup/restore drills, and formal audit trails
+- Accessibility review and verification of the complete learning experience
+- Production TLS/reverse-proxy configuration, monitoring, alerting, and deployment verification
+- A committed dependency lockfile and reproducible dependency installation
+
+This repository is still in active development. Security changes in pull request #19 are not live until reviewed, merged, configured, and deployed.
 
 ## Monitoring & Observability
 

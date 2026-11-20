@@ -3,6 +3,7 @@
  */
 import { verifyToken, getUserById } from '../services/auth.js';
 import { logger } from '../utils/logger.js';
+import { isTokenVersionCurrent } from '../services/tokenVersion.js';
 
 export async function authenticate(req, res, next) {
   try {
@@ -25,7 +26,7 @@ export async function authenticate(req, res, next) {
     // Get user details
     const user = await getUserById(payload.userId);
     
-    if (!user || user.status !== 'active') {
+    if (!user || user.status !== 'active' || !isTokenVersionCurrent(payload.tokenVersion, user.token_version)) {
       const error = new Error('User not found or inactive');
       error.status = 401;
       throw error;

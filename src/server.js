@@ -1,6 +1,6 @@
 import express from 'express';
 import dotenv from 'dotenv';
-import { initializeDatabase } from './db/init.js';
+import { initializeDatabase, getPool } from './db/init.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { securityHeaders } from './middleware/securityHeaders.js';
 import { logger } from './utils/logger.js';
@@ -12,14 +12,15 @@ import analyticsRoutes from './routes/analytics.js';
 dotenv.config();
 
 const app = express();
+app.disable('x-powered-by');
 const PORT = process.env.PORT || 3000;
 const NODE_ENV = process.env.NODE_ENV || 'development';
 
 // Security headers must run before routes so all responses receive them.
 app.use(securityHeaders);
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '1mb' }));
+app.use(express.urlencoded({ extended: true, limit: '1mb', parameterLimit: 100 }));
 
 // Request logging
 app.use((req, res, next) => {
@@ -34,13 +35,23 @@ app.use('/api/content', contentRoutes);
 app.use('/api/analytics', analyticsRoutes);
 
 // Health check
-app.get('/health', (req, res) => {
-  res.json({
-    status: 'OK',
-    timestamp: new Date().toISOString(),
-    environment: NODE_ENV,
-    version: '0.1.0'
-  });
+app.get('/health', async (req, res) => {
+  try {
+    await getPool().query('SELECT 1');
+    return res.status(200).json({
+      status: 'ok',
+      database: 'ok',
+      timestamp: new Date().toISOString(),
+      version: '0.1.0'
+    });
+  } catch (error) {
+    logger.error('Readiness check failed', { error: error.message });
+    return res.status(503).json({
+      status: 'unavailable',
+      database: 'unavailable',
+      timestamp: new Date().toISOString()
+    });
+  }
 });
 
 // 404 handler

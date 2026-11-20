@@ -1,27 +1,39 @@
 import express from 'express';
 import { asyncHandler } from '../middleware/errorHandler.js';
+import { validate } from '../middleware/validation.js';
 import { authenticate } from '../middleware/auth.js';
 import { logger } from '../utils/logger.js';
+import { getLearnerProfile } from '../services/auth.js';
+import { getPool } from '../db/init.js';
 import { generateLearningPath, getLearningPath } from '../services/learningPath.js';
-import { getLesson, completeLesson, generateFeedback, updateProgress } from '../services/lesson.js';
+import { getLesson, completeLesson, evaluateLessonAnswer, updateProgress } from '../services/lesson.js';
 import { getLearnerProgress, getSkillProgress } from '../services/progress.js';
 import { getNextRecommendation } from '../services/recommendation.js';
-import { createDiagnosticAssessment, submitAssessment, getAssessment } from '../services/assessment.js';
+import { createDiagnosticAssessment, submitAssessment, sanitizeAssessmentQuestions } from '../services/assessment.js';
 
 const router = express.Router();
+
+async function getAuthenticatedLearnerId(req) {
+  const learnerProfile = await getLearnerProfile(req.user.id);
+  if (!learnerProfile) {
+    const error = new Error('Learner profile not found');
+    error.status = 404;
+    throw error;
+  }
+  return learnerProfile.id;
+}
 
 /**
  * GET /api/learner/dashboard
  * Get learner dashboard data
  */
 router.get('/dashboard', authenticate, asyncHandler(async (req, res) => {
-  const { learner_id } = req.query;
-  const learnerId = learner_id || req.user.id;
+  const learnerId = await getAuthenticatedLearnerId(req);
   
   logger.info('📊 Dashboard load', { learnerId });
   
   // Get active learning paths
-  const pool = require('../db/init.js').getPool();
+  const pool = getPool();
   const pathsResult = await pool.query(
     'SELECT id, subject_id, goal, status FROM learning_paths WHERE learner_id = $1 AND status = $2 LIMIT 5',
     [learnerId, 'active']
@@ -39,11 +51,11 @@ router.get('/dashboard', authenticate, asyncHandler(async (req, res) => {
  * POST /api/learner/goal
  * Set or update learner goal and generate learning path
  */
-router.post('/goal', authenticate, asyncHandler(async (req, res) => {
+router.post('/goal', authenticate, validate('goal'), asyncHandler(async (req, res) => {
   const { subjectId, goalDescription } = req.body;
-  const learnerId = req.user.id;
+  const learnerId = await getAuthenticatedLearnerId(req);
   
-  logger.info('🎯 Goal selection', { learnerId, subjectId, goalDescription });
+  logger.info('Goal selection', { learnerId, subjectId });
   
   // Generate learning path
   const pathData = await generateLearningPath(learnerId, subjectId, goalDescription);
@@ -62,7 +74,7 @@ router.post('/goal', authenticate, asyncHandler(async (req, res) => {
  */
 router.get('/path/:pathId', authenticate, asyncHandler(async (req, res) => {
   const { pathId } = req.params;
-  const learnerId = req.user.id;
+  const learnerId = await getAuthenticatedLearnerId(req);
   
   logger.info('📋 Path view', { pathId, learnerId });
   
@@ -82,7 +94,7 @@ router.get('/path/:pathId', authenticate, asyncHandler(async (req, res) => {
  */
 router.get('/lesson/:lessonId', authenticate, asyncHandler(async (req, res) => {
   const { lessonId } = req.params;
-  const learnerId = req.user.id;
+  const learnerId = await getAuthenticatedLearnerId(req);
   
   logger.info('📖 Lesson view', { lessonId, learnerId });
   
@@ -95,31 +107,17 @@ router.get('/lesson/:lessonId', authenticate, asyncHandler(async (req, res) => {
  * POST /api/learner/lesson/:lessonId/answer
  * Submit lesson answer and get feedback
  */
-router.post('/lesson/:lessonId/answer', authenticate, asyncHandler(async (req, res) => {
+router.post('/lesson/:lessonId/answer', authenticate, validate('answer'), asyncHandler(async (req, res) => {
   const { lessonId } = req.params;
-  const { questionId, answer, correctAnswer } = req.body;
-  const learnerId = req.user.id;
-  
-  logger.info('✏️ Answer submission', { lessonId, learnerId });
-  
-  // Generate feedback
-  const feedback = await generateFeedback(
-    { explanation: 'See explanation above' },
-    answer,
-    correctAnswer
-  );
-  
-  // Update progress
+  const { questionId, answer } = req.body;
+  const learnerId = await getAuthenticatedLearnerId(req);
+
+  logger.info('Lesson answer submitted', { lessonId, learnerId, questionId });
+
+  const feedback = await evaluateLessonAnswer(lessonId, learnerId, questionId, answer);
   const completion = feedback.isCorrect ? 100 : 50;
   await updateProgress(lessonId, learnerId, 'in_progress', completion);
-  
-  // Get next recommendation
-  const pool = require('../db/init.js').getPool();
-  const pathResult = await pool.query(
-    'SELECT subject_id FROM learning_paths WHERE id IN (SELECT path_id FROM progress WHERE lesson_id = $1 LIMIT 1) LIMIT 1',
-    [lessonId]
-  );
-  
+
   res.json({
     feedback,
     progress: completion,
@@ -133,19 +131,29 @@ router.post('/lesson/:lessonId/answer', authenticate, asyncHandler(async (req, r
  */
 router.post('/lesson/:lessonId/complete', authenticate, asyncHandler(async (req, res) => {
   const { lessonId } = req.params;
-  const learnerId = req.user.id;
+  const learnerId = await getAuthenticatedLearnerId(req);
   
   logger.info('✅ Lesson completion', { lessonId, learnerId });
   
   await completeLesson(lessonId, learnerId);
   
   // Get next recommendation
-  const pool = require('../db/init.js').getPool();
+  const pool = getPool();
   const pathResult = await pool.query(
-    `SELECT lp.subject_id FROM learning_paths lp
-     JOIN progress p ON true
-     WHERE p.lesson_id = $1 LIMIT 1`,
-    [lessonId]
+    `SELECT DISTINCT lp.subject_id
+     FROM learning_paths lp
+     JOIN topics t ON t.subject_id = lp.subject_id
+     JOIN skills s ON s.topic_id = t.id
+     JOIN lessons l ON l.skill_id = s.id
+     WHERE l.id = $1
+       AND lp.learner_id = $2
+       AND lp.status = 'active'
+       AND t.status = 'published'
+       AND s.status = 'published'
+       AND l.status = 'published'
+     ORDER BY lp.subject_id
+     LIMIT 1`,
+    [lessonId, learnerId]
   );
   
   const subjectId = pathResult.rows[0]?.subject_id;
@@ -163,8 +171,12 @@ router.post('/lesson/:lessonId/complete', authenticate, asyncHandler(async (req,
  * Get learner's overall progress
  */
 router.get('/progress', authenticate, asyncHandler(async (req, res) => {
-  const { subjectId } = req.query;
-  const learnerId = req.user.id;
+  const rawSubjectId = req.query.subjectId;
+  const subjectId = rawSubjectId === undefined ? null : Number(rawSubjectId);
+  if (rawSubjectId !== undefined && (!Number.isSafeInteger(subjectId) || subjectId <= 0)) {
+    return res.status(400).json({ error: 'subjectId must be a positive integer' });
+  }
+  const learnerId = await getAuthenticatedLearnerId(req);
   
   logger.info('📈 Progress fetch', { learnerId });
   
@@ -181,23 +193,71 @@ router.get('/progress', authenticate, asyncHandler(async (req, res) => {
  * POST /api/learner/assessment/diagnostic
  * Start diagnostic assessment
  */
-router.post('/assessment/diagnostic', authenticate, asyncHandler(async (req, res) => {
+router.post('/assessment/diagnostic', authenticate, validate('diagnostic'), asyncHandler(async (req, res) => {
   const { topicId } = req.body;
-  const learnerId = req.user.id;
+  const learnerId = await getAuthenticatedLearnerId(req);
   
   logger.info('📋 Diagnostic assessment started', { learnerId, topicId });
   
-  // Create sample diagnostic questions
-  const diagnosticQuestions = [
-    { id: 1, text: 'Sample diagnostic question 1', explanation: 'Learn more here' },
-    { id: 2, text: 'Sample diagnostic question 2', explanation: 'Learn more here' }
-  ];
-  
-  const assessment = await createDiagnosticAssessment(learnerId, topicId, diagnosticQuestions);
+  // Build diagnostics from real, published lesson questions in the learner's active path.
+  const pool = getPool();
+  const lessonRows = await pool.query(
+    `SELECT l.id AS lesson_id, l.content
+     FROM lessons l
+     JOIN skills s ON s.id = l.skill_id
+     JOIN topics t ON t.id = s.topic_id
+     JOIN learning_paths lp
+       ON lp.subject_id = t.subject_id
+      AND lp.learner_id = $1
+      AND lp.status = 'active'
+     WHERE t.id = $2
+       AND t.status = 'published'
+       AND s.status = 'published'
+       AND l.status = 'published'
+     ORDER BY l.id`,
+    [learnerId, topicId]
+  );
+
+  const diagnosticQuestions = [];
+  const seenQuestionIds = new Set();
+  for (const row of lessonRows.rows) {
+    const content = typeof row.content === 'string' ? JSON.parse(row.content) : row.content;
+    for (const question of (Array.isArray(content?.questions) ? content.questions : [])) {
+      if (!question || typeof question !== 'object' || Array.isArray(question)) continue;
+      const answerKey = question.correctAnswer ?? question.correctOptionId ?? question.answerKey;
+      const acceptedAnswers = Array.isArray(question.acceptedAnswers) ? question.acceptedAnswers : [answerKey];
+      const questionId = `${row.lesson_id}:${question.id}`;
+      const prompt = question.prompt ?? question.text;
+      if (question.id === undefined || seenQuestionIds.has(questionId) ||
+          typeof prompt !== 'string' || prompt.trim().length < 5 ||
+          acceptedAnswers.length === 0 ||
+          acceptedAnswers.some(value => value === undefined || value === null || String(value).trim() === '')) {
+        continue;
+      }
+      seenQuestionIds.add(questionId);
+      diagnosticQuestions.push({
+        ...question,
+        id: questionId,
+        prompt
+      });
+    }
+  }
+
+  if (diagnosticQuestions.length < 5) {
+    return res.status(409).json({
+      error: 'This topic does not have enough published diagnostic questions yet'
+    });
+  }
+
+  const assessment = await createDiagnosticAssessment(
+    learnerId,
+    topicId,
+    diagnosticQuestions.slice(0, 10)
+  );
   
   res.status(201).json({
     assessmentId: assessment.id,
-    questions: assessment.questions,
+    questions: sanitizeAssessmentQuestions(assessment.questions),
     message: 'Answer these questions to determine your starting point'
   });
 }));
@@ -206,14 +266,14 @@ router.post('/assessment/diagnostic', authenticate, asyncHandler(async (req, res
  * POST /api/learner/assessment/:assessmentId/submit
  * Submit diagnostic assessment
  */
-router.post('/assessment/:assessmentId/submit', authenticate, asyncHandler(async (req, res) => {
+router.post('/assessment/:assessmentId/submit', authenticate, validate('assessmentResponses'), asyncHandler(async (req, res) => {
   const { assessmentId } = req.params;
   const { responses } = req.body;
-  const learnerId = req.user.id;
+  const learnerId = await getAuthenticatedLearnerId(req);
   
   logger.info('📋 Diagnostic assessment submitted', { learnerId, assessmentId });
   
-  const assessment = await submitAssessment(assessmentId, responses);
+  const assessment = await submitAssessment(assessmentId, learnerId, responses);
   
   res.json({
     assessmentId: assessment.id,

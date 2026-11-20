@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main, develop, security/rate-limit-auth-routes]
   pull_request:
     branches: [main, develop]
 
@@ -16,32 +16,171 @@ jobs:
       postgres:
         image: postgres:15-alpine
         env:
-          POSTGRES_USER: uecos_user
-          POSTGRES_PASSWORD: uecos_test_password
+          POSTGRES_USER: uecos_admin
+          POSTGRES_PASSWORD: uecos_admin_test_password
           POSTGRES_DB: uecos_test
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U uecos_user -d uecos_test"
+          --health-cmd "pg_isready -U uecos_admin -d uecos_test"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
     steps:
       - uses: actions/checkout@v4
+      - name: Validate Docker Compose configuration
+        env:
+          POSTGRES_ADMIN_PASSWORD: ci-compose-admin-password-only
+          APP_DB_PASSWORD: ci-compose-app-password-only
+          JWT_SECRET: test-only-secret-for-ci-at-least-32-characters
+        run: docker compose config --quiet
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
-      - run: npm install
+          node-version: 22
+      - run: npm ci
+      - name: Create least-privileged application database role
+        env:
+          DATABASE_ADMIN_URL: postgresql://uecos_admin:uecos_admin_test_password@localhost:5432/uecos_test
+        run: |
+          node --input-type=module <<'NODE'
+          import pg from 'pg';
+          const pool = new pg.Pool({ connectionString: process.env.DATABASE_ADMIN_URL });
+          try {
+            await pool.query("CREATE ROLE uecos_app LOGIN PASSWORD 'uecos_test_app_password'");
+            await pool.query('GRANT CONNECT ON DATABASE uecos_test TO uecos_app');
+            await pool.query('GRANT USAGE, CREATE ON SCHEMA public TO uecos_app');
+          } finally {
+            await pool.end();
+          }
+          NODE
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
       - name: Run database migrations
         env:
-          DATABASE_URL: postgresql://uecos_user:uecos_test_password@localhost:5432/uecos_test
+          DATABASE_URL: postgresql://uecos_app:uecos_test_app_password@localhost:5432/uecos_test
         run: npm run migrate
-      - name: Run test suite
+      - name: Seed test database
         env:
-          DATABASE_URL: postgresql://uecos_user:uecos_test_password@localhost:5432/uecos_test
+          DATABASE_URL: postgresql://uecos_app:uecos_test_app_password@localhost:5432/uecos_test
           JWT_SECRET: test-only-secret-for-ci-at-least-32-characters
           NODE_ENV: test
+          SEED_ADMIN_EMAIL: admin@example.com
+          SEED_ADMIN_PASSWORD: TestAdminPassword123!
+        run: npm run seed
+      - name: Verify seed operation is idempotent
+        env:
+          DATABASE_URL: postgresql://uecos_app:uecos_test_app_password@localhost:5432/uecos_test
+          JWT_SECRET: test-only-secret-for-ci-at-least-32-characters
+          NODE_ENV: test
+          SEED_ADMIN_EMAIL: admin@example.com
+          SEED_ADMIN_PASSWORD: TestAdminPassword123!
+        run: |
+          npm run seed
+          node --input-type=module <<'NODE'
+          import pg from 'pg';
+          const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
+          try {
+            const result = await pool.query(`
+              SELECT
+                (SELECT COUNT(*)::integer FROM topics t JOIN subjects s ON s.id = t.subject_id
+                 WHERE s.name = 'Mathematics' AND t.name = 'Arithmetic Fundamentals') AS topics,
+                (SELECT COUNT(*)::integer FROM skills sk JOIN topics t ON t.id = sk.topic_id
+                 WHERE t.name = 'Arithmetic Fundamentals' AND sk.name = 'Addition and Subtraction Foundations') AS skills,
+                (SELECT COUNT(*)::integer FROM lessons l JOIN skills sk ON sk.id = l.skill_id
+                 WHERE sk.name = 'Addition and Subtraction Foundations'
+                   AND l.title = 'Addition and Subtraction: Combining and Comparing Quantities') AS lessons,
+                (SELECT COUNT(*)::integer FROM topics t JOIN subjects s ON s.id = t.subject_id
+                 WHERE s.name = 'Mathematics' AND t.name = 'Fractions and Decimals') AS fractions_topics,
+                (SELECT COUNT(*)::integer FROM skills sk JOIN topics t ON t.id = sk.topic_id
+                 WHERE t.name = 'Fractions and Decimals' AND sk.name = 'Fraction Concepts and Equivalent Forms') AS fractions_skills,
+                (SELECT COUNT(*)::integer FROM lessons l JOIN skills sk ON sk.id = l.skill_id
+                 WHERE sk.name = 'Fraction Concepts and Equivalent Forms'
+                   AND l.title = 'Fractions: Parts of a Whole and Equivalent Forms') AS fractions_lessons,
+                (SELECT COUNT(*)::integer FROM topics t JOIN subjects s ON s.id = t.subject_id
+                 WHERE s.name = 'Mathematics' AND t.name = 'Geometry Basics') AS geometry_topics,
+                (SELECT COUNT(*)::integer FROM skills sk JOIN topics t ON t.id = sk.topic_id
+                 WHERE t.name = 'Geometry Basics' AND sk.name = 'Shape Properties and Measurement') AS geometry_skills,
+                (SELECT COUNT(*)::integer FROM lessons l JOIN skills sk ON sk.id = l.skill_id
+                 WHERE sk.name = 'Shape Properties and Measurement'
+                   AND l.title = 'Geometry: Shape Properties, Perimeter, and Area') AS geometry_lessons,
+                (SELECT COUNT(*)::integer FROM topics t JOIN subjects s ON s.id = t.subject_id
+                 WHERE s.name = 'Mathematics' AND t.name = 'Algebra Fundamentals') AS algebra_topics,
+                (SELECT COUNT(*)::integer FROM skills sk JOIN topics t ON t.id = sk.topic_id
+                 WHERE t.name = 'Algebra Fundamentals' AND sk.name = 'Variables and One-Step Equations') AS algebra_skills,
+                (SELECT COUNT(*)::integer FROM lessons l JOIN skills sk ON sk.id = l.skill_id
+                 WHERE sk.name = 'Variables and One-Step Equations'
+                   AND l.title = 'Algebra: Variables and One- and Two-Step Equations') AS algebra_lessons
+            `);
+            const counts = result.rows[0];
+            if (counts.topics !== 1 || counts.skills !== 1 || counts.lessons !== 1 || counts.fractions_topics !== 1 || counts.fractions_skills !== 1 || counts.fractions_lessons !== 1 || counts.geometry_topics !== 1 || counts.geometry_skills !== 1 || counts.geometry_lessons !== 1 || counts.algebra_topics !== 1 || counts.algebra_skills !== 1 || counts.algebra_lessons !== 1) {
+              throw new Error(`Seed data is not idempotent: ${JSON.stringify(counts)}`);
+            }
+            process.stdout.write('Seed data is idempotent\\n');
+          } finally {
+            await pool.end();
+          }
+          NODE
+      - name: Start API server
+        env:
+          DATABASE_URL: postgresql://uecos_app:uecos_test_app_password@localhost:5432/uecos_test
+          JWT_SECRET: test-only-secret-for-ci-at-least-32-characters
+          NODE_ENV: test
+          PORT: 3000
+        run: |
+          npm start > /tmp/uecos-server.log 2>&1 &
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:3000/health > /dev/null; then
+              echo "API server is ready"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "API server failed to become ready"
+          cat /tmp/uecos-server.log
+          exit 1
+      - name: Run test suite
+        env:
+          DATABASE_URL: postgresql://uecos_app:uecos_test_app_password@localhost:5432/uecos_test
+          JWT_SECRET: test-only-secret-for-ci-at-least-32-characters
+          NODE_ENV: test
+          API_BASE: http://127.0.0.1:3000
         run: npm test
+
+  compose-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create isolated Compose environment
+        run: |
+          cat > .env <<'EOF'
+          POSTGRES_ADMIN_USER=uecos_admin
+          POSTGRES_ADMIN_PASSWORD=ci-compose-admin-password-only
+          APP_DB_USER=uecos_app
+          APP_DB_PASSWORD=ci-compose-app-password-only
+          JWT_SECRET=test-only-secret-for-ci-at-least-32-characters
+          NODE_ENV=development
+          PORT=3000
+          TRUST_PROXY_HOPS=0
+          EOF
+      - name: Start Compose stack
+        run: docker compose up --build -d
+      - name: Verify API health using the non-superuser database role
+        run: |
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent http://127.0.0.1:3000/health > /dev/null; then
+              echo "Compose API is healthy"
+              exit 0
+            fi
+            sleep 2
+          done
+          docker compose ps
+          docker compose logs
+          exit 1
+      - name: Verify application runs as non-root
+        run: docker compose exec -T app node -e "if (process.getuid && process.getuid() === 0) process.exit(1); console.log('Application runs as non-root')"
+      - name: Stop Compose stack
+        if: always()
+        run: docker compose down -v
 
   docker-build:
     runs-on: ubuntu-latest

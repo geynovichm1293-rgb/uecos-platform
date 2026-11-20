@@ -25,3 +25,15 @@ test('securityHeaders sets restrictive headers and continues the request', () =>
   );
   assert.equal(nextCalled, true);
 });
+
+test('adds HSTS only when the request is secure', () => {
+  const secureHeaders = new Map();
+  const secureRes = { setHeader: (name, value) => secureHeaders.set(name.toLowerCase(), value) };
+  securityHeaders({ secure: true }, secureRes, () => {});
+  assert.equal(secureHeaders.get('strict-transport-security'), 'max-age=31536000');
+
+  const plainHeaders = new Map();
+  const plainRes = { setHeader: (name, value) => plainHeaders.set(name.toLowerCase(), value) };
+  securityHeaders({ secure: false }, plainRes, () => {});
+  assert.equal(plainHeaders.has('strict-transport-security'), false);
+});

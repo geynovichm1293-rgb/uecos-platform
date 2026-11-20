@@ -1,15 +1,19 @@
-FROM node:20-alpine
+FROM node:22-alpine
 
 WORKDIR /app
 
 # Copy package manifest and install production dependencies.
 COPY package*.json ./
-RUN npm install --omit=dev
+RUN npm ci --omit=dev
 
 # Copy application source.
 COPY src/ ./src/
 
 ENV NODE_ENV=production
+
+# Run the application as the unprivileged Node.js user.
+USER node
+
 EXPOSE 3000
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \

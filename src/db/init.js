@@ -7,10 +7,24 @@ let pool = null;
 
 export function getPool() {
   if (!pool) {
-    pool = new Pool({
-      connectionString: process.env.DATABASE_URL,
-      max: parseInt(process.env.DATABASE_POOL_SIZE) || 10
-    });
+    const configuredPoolSize = process.env.DATABASE_POOL_SIZE === undefined
+      ? 10
+      : Number(process.env.DATABASE_POOL_SIZE);
+    if (!Number.isInteger(configuredPoolSize) || configuredPoolSize < 1 || configuredPoolSize > 50) {
+      throw new Error('DATABASE_POOL_SIZE must be an integer between 1 and 50.');
+    }
+
+    const config = { max: configuredPoolSize };
+    if (process.env.DATABASE_URL) {
+      config.connectionString = process.env.DATABASE_URL;
+    } else {
+      config.host = process.env.PGHOST;
+      config.port = Number(process.env.PGPORT) || 5432;
+      config.user = process.env.PGUSER;
+      config.password = process.env.PGPASSWORD;
+      config.database = process.env.PGDATABASE;
+    }
+    pool = new Pool(config);
   }
   return pool;
 }
@@ -20,11 +34,14 @@ export async function initializeDatabase() {
   
   try {
     const client = await pool.connect();
-    const version = await client.query('SELECT version();');
-    logger.info('Database connection established');
-    logger.info('PostgreSQL version:', { version: version.rows[0].version });
-    client.release();
-    
+    try {
+      const version = await client.query('SELECT version();');
+      logger.info('Database connection established');
+      logger.info('PostgreSQL version:', { version: version.rows[0].version });
+    } finally {
+      client.release();
+    }
+
     // Run migrations
     await runMigrations(pool);
   } catch (error) {
@@ -36,24 +53,41 @@ export async function initializeDatabase() {
 async function runMigrations(pool) {
   const migrations = [
     createUsersTable,
+    ensureUserTokenVersion,
+    ensureCaseInsensitiveUserEmail,
+    createApiRateLimitsTable,
     createLearnersTable,
     createSubjectsTable,
     createTopicsTable,
     createSkillsTable,
     createLessonsTable,
     createLearningPathsTable,
+    ensureSingleActiveLearningPath,
+    ensureLearningPathStartingLevel,
     createProgressTable,
     createAssessmentsTable
   ];
-  
-  for (const migration of migrations) {
-    try {
-      await migration(pool);
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    // Serialize startup migrations across multiple application instances.
+    await client.query('SELECT pg_advisory_xact_lock($1)', [78320415]);
+
+    for (const migration of migrations) {
+      await migration(client);
       logger.info(`Migration completed: ${migration.name}`);
-    } catch (error) {
-      logger.error(`Migration failed: ${migration.name}`, error);
-      throw error;
     }
+
+    await client.query('COMMIT');
+  } catch (error) {
+    try { await client.query('ROLLBACK'); } catch (rollbackError) {
+      logger.error('Migration rollback failed', { error: rollbackError.message });
+    }
+    logger.error('Database migration transaction failed', { error: error.message });
+    throw error;
+  } finally {
+    client.release();
   }
 }
 
@@ -65,10 +99,36 @@ async function createUsersTable(pool) {
       password_hash VARCHAR(255) NOT NULL,
       role VARCHAR(50) NOT NULL DEFAULT 'learner',
       status VARCHAR(50) DEFAULT 'active',
+      token_version INTEGER NOT NULL DEFAULT 0,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
   `);
+}
+
+
+async function ensureUserTokenVersion(pool) {
+  await pool.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS token_version INTEGER NOT NULL DEFAULT 0');
+}
+
+async function ensureCaseInsensitiveUserEmail(pool) {
+  await pool.query(
+    'CREATE UNIQUE INDEX IF NOT EXISTS users_email_lower_unique_idx ON users (LOWER(email))'
+  );
+}
+
+
+async function createApiRateLimitsTable(pool) {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS api_rate_limits (
+      bucket_key CHAR(64) PRIMARY KEY,
+      window_started_at TIMESTAMPTZ NOT NULL,
+      request_count INTEGER NOT NULL CHECK (request_count > 0)
+    )
+  `);
+  await pool.query(
+    'CREATE INDEX IF NOT EXISTS api_rate_limits_window_started_idx ON api_rate_limits (window_started_at)'
+  );
 }
 
 async function createLearnersTable(pool) {
@@ -171,6 +231,36 @@ async function createLearningPathsTable(pool) {
       FOREIGN KEY (subject_id) REFERENCES subjects(id)
     )
   `);
+}
+
+async function ensureSingleActiveLearningPath(pool) {
+  // Repair legacy duplicate active paths before enforcing the invariant.
+  await pool.query(`
+    WITH ranked_paths AS (
+      SELECT id,
+             ROW_NUMBER() OVER (
+               PARTITION BY learner_id, subject_id
+               ORDER BY updated_at DESC, id DESC
+             ) AS position
+      FROM learning_paths
+      WHERE status = 'active'
+    )
+    UPDATE learning_paths lp
+    SET status = 'superseded', updated_at = CURRENT_TIMESTAMP
+    FROM ranked_paths ranked
+    WHERE lp.id = ranked.id AND ranked.position > 1
+  `);
+  await pool.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS learning_paths_one_active_per_subject_idx
+    ON learning_paths (learner_id, subject_id)
+    WHERE status = 'active'
+  `);
+}
+
+async function ensureLearningPathStartingLevel(pool) {
+  await pool.query(
+    "ALTER TABLE learning_paths ADD COLUMN IF NOT EXISTS starting_level VARCHAR(50) NOT NULL DEFAULT 'NOT_ASSESSED'"
+  );
 }
 
 async function createProgressTable(pool) {

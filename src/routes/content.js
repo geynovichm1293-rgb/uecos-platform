@@ -3,6 +3,8 @@ import { asyncHandler } from '../middleware/errorHandler.js';
 import { authenticate, authorize } from '../middleware/auth.js';
 import { logger } from '../utils/logger.js';
 import { getPool } from '../db/init.js';
+import { validate } from '../middleware/validation.js';
+import { validateLessonForPublishing } from '../services/lesson.js';
 
 const router = express.Router();
 
@@ -34,14 +36,17 @@ router.get('/subjects', asyncHandler(async (req, res) => {
 router.get('/search', asyncHandler(async (req, res) => {
   const { q, type = 'all' } = req.query;
   
-  if (!q || q.length < 2) {
-    return res.status(400).json({ error: 'Search query must be at least 2 characters' });
+  if (typeof q !== 'string' || q.trim().length < 2 || q.trim().length > 100) {
+    return res.status(400).json({ error: 'Search query must be between 2 and 100 characters' });
+  }
+  if (!['all', 'subject', 'topic', 'lesson'].includes(type)) {
+    return res.status(400).json({ error: 'Invalid search type' });
   }
   
-  logger.info('🔎 Content search', { query: q, type });
+  logger.info('Content search', { type, queryLength: q.trim().length });
   
   const pool = getPool();
-  const searchTerm = `%${q}%`;
+  const searchTerm = `%${q.trim()}%`;
   
   let results = {};
   
@@ -76,7 +81,7 @@ router.get('/search', asyncHandler(async (req, res) => {
  * POST /api/content/admin/subject (admin only)
  * Create new subject
  */
-router.post('/admin/subject', authenticate, authorize('administrator'), asyncHandler(async (req, res) => {
+router.post('/admin/subject', authenticate, authorize('administrator'), validate('subject'), asyncHandler(async (req, res) => {
   const { name, description, ageRangeMin, ageRangeMax } = req.body;
   
   logger.info('✏️ Subject creation (admin)', { name });
@@ -96,7 +101,7 @@ router.post('/admin/subject', authenticate, authorize('administrator'), asyncHan
  * POST /api/content/admin/topic (admin only)
  * Create new topic
  */
-router.post('/admin/topic', authenticate, authorize('administrator'), asyncHandler(async (req, res) => {
+router.post('/admin/topic', authenticate, authorize('administrator'), validate('topic'), asyncHandler(async (req, res) => {
   const { subjectId, name, description } = req.body;
   
   logger.info('✏️ Topic creation (admin)', { subjectId, name });
@@ -116,7 +121,7 @@ router.post('/admin/topic', authenticate, authorize('administrator'), asyncHandl
  * POST /api/content/admin/lesson (admin only)
  * Create new lesson
  */
-router.post('/admin/lesson', authenticate, authorize('administrator'), asyncHandler(async (req, res) => {
+router.post('/admin/lesson', authenticate, authorize('administrator'), validate('lesson'), asyncHandler(async (req, res) => {
   const { skillId, title, description, content, durationMinutes } = req.body;
   
   logger.info('✏️ Lesson creation (admin)', { skillId, title });
@@ -136,20 +141,38 @@ router.post('/admin/lesson', authenticate, authorize('administrator'), asyncHand
  * PATCH /api/content/admin/lesson/:lessonId (admin only)
  * Update lesson
  */
-router.patch('/admin/lesson/:lessonId', authenticate, authorize('administrator'), asyncHandler(async (req, res) => {
+router.patch('/admin/lesson/:lessonId', authenticate, authorize('administrator'), validate('lessonUpdate'), asyncHandler(async (req, res) => {
   const { lessonId } = req.params;
   const { title, description, content } = req.body;
   
   logger.info('✏️ Lesson update (admin)', { lessonId });
   
   const pool = getPool();
+  const updates = [];
+  const values = [];
+  if (title !== undefined) {
+    values.push(title);
+    updates.push(`title = ${values.length}`);
+  }
+  if (description !== undefined) {
+    values.push(description);
+    updates.push(`description = ${values.length}`);
+  }
+  if (content !== undefined) {
+    values.push(JSON.stringify(content));
+    updates.push(`content = ${values.length}`);
+  }
+  values.push(lessonId);
+
   const result = await pool.query(
-    `UPDATE lessons SET title = $1, description = $2, content = $3, updated_at = CURRENT_TIMESTAMP
-     WHERE id = $4
+    `UPDATE lessons SET ${updates.join(', ')}, updated_at = CURRENT_TIMESTAMP
+     WHERE id = ${values.length}
      RETURNING *`,
-    [title, description, JSON.stringify(content), lessonId]
+    values
   );
-  
+  if (result.rows.length === 0) {
+    return res.status(404).json({ error: 'Lesson not found' });
+  }
   res.json(result.rows[0]);
 }));
 
@@ -163,13 +186,31 @@ router.post('/admin/publish/:lessonId', authenticate, authorize('administrator')
   logger.info('🚀 Lesson publish (admin)', { lessonId });
   
   const pool = getPool();
+  const existing = await pool.query(
+    'SELECT id, content FROM lessons WHERE id = $1',
+    [lessonId]
+  );
+  if (existing.rows.length === 0) {
+    return res.status(404).json({ error: 'Lesson not found' });
+  }
+
+  const content = typeof existing.rows[0].content === 'string'
+    ? JSON.parse(existing.rows[0].content)
+    : existing.rows[0].content;
+  const qualityErrors = validateLessonForPublishing(content);
+  if (qualityErrors.length > 0) {
+    return res.status(422).json({
+      error: 'Lesson does not meet the publishing requirements',
+      details: qualityErrors
+    });
+  }
+
   const result = await pool.query(
     `UPDATE lessons SET status = $1, updated_at = CURRENT_TIMESTAMP
      WHERE id = $2
-     RETURNING *`,
+     RETURNING id, skill_id, title, description, duration_minutes, difficulty_level, status, created_at, updated_at`,
     ['published', lessonId]
   );
-  
   res.json({ status: 'published', lesson: result.rows[0] });
 }));
 

@@ -7,49 +7,97 @@ import { determineStartingLevel } from './assessment.js';
  */
 export async function generateLearningPath(learnerId, subjectId, goalDescription, diagnosticScore = null) {
   const pool = getPool();
-  
+  const client = await pool.connect();
+
   try {
-    // Create learning path
-    const pathResult = await pool.query(
-      `INSERT INTO learning_paths (learner_id, subject_id, goal, status)
-       VALUES ($1, $2, $3, $4)
-       RETURNING *`,
-      [learnerId, subjectId, goalDescription, 'active']
-    );
-    
-    const path = pathResult.rows[0];
-    
-    // Get subject content hierarchy
-    const contentResult = await pool.query(
-      `SELECT t.id, t.name, s.id as skill_id, s.name as skill_name, s.difficulty_level
-       FROM topics t
-       LEFT JOIN skills s ON t.id = s.topic_id
-       WHERE t.subject_id = $1
-       ORDER BY t.id, s.difficulty_level`,
+    await client.query('BEGIN');
+    // Serialize concurrent path replacements for the same learner/subject pair.
+    await client.query('SELECT pg_advisory_xact_lock($1::integer, $2::integer)', [learnerId, subjectId]);
+
+    const subjectResult = await client.query(
+      `SELECT id FROM subjects WHERE id = $1 AND status = 'published' FOR SHARE`,
       [subjectId]
     );
-    
-    // Organize content by starting level
-    const startingLevel = diagnosticScore ? determineStartingLevel(diagnosticScore) : 'INTRODUCED';
-    const recommendedTopics = filterContentByLevel(contentResult.rows, startingLevel);
-    
-    logger.info('🎯 Learning path generated', {
+    if (subjectResult.rows.length === 0) {
+      const error = new Error('Published subject not found');
+      error.status = 404;
+      throw error;
+    }
+
+    // Keep one active path per learner and subject.
+    await client.query(
+      `UPDATE learning_paths
+       SET status = 'superseded', updated_at = CURRENT_TIMESTAMP
+       WHERE learner_id = $1 AND subject_id = $2 AND status = 'active'`,
+      [learnerId, subjectId]
+    );
+
+    const pathResult = await client.query(
+      `INSERT INTO learning_paths (learner_id, subject_id, goal, status)
+       VALUES ($1, $2, $3, 'active')
+       RETURNING *`,
+      [learnerId, subjectId, goalDescription]
+    );
+
+    const contentResult = await client.query(
+      `SELECT t.id, t.name, s.id as skill_id, s.name as skill_name, s.difficulty_level
+       FROM topics t
+       LEFT JOIN skills s
+         ON t.id = s.topic_id
+        AND s.status = 'published'
+       WHERE t.subject_id = $1
+         AND t.status = 'published'
+       ORDER BY t.id, s.difficulty_level, s.id`,
+      [subjectId]
+    );
+
+    await client.query('COMMIT');
+
+    const path = pathResult.rows[0];
+    const startingLevel = Number.isFinite(diagnosticScore)
+      ? determineStartingLevel(diagnosticScore)
+      : 'NOT_ASSESSED';
+    const recommendedTopics = groupPublishedContent(contentResult.rows);
+
+    logger.info('Learning path generated', {
       pathId: path.id,
       learnerId,
       topicCount: recommendedTopics.length,
       startingLevel
     });
-    
+
     return {
       path,
       topics: recommendedTopics,
       startingLevel,
-      totalTopics: contentResult.rows.length
+      totalTopics: recommendedTopics.length
     };
   } catch (error) {
-    logger.error('❌ Learning path generation failed', { error: error.message });
+    try { await client.query('ROLLBACK'); } catch (rollbackError) {
+      logger.error('Learning path rollback failed', { error: rollbackError.message });
+    }
+    logger.error('Learning path generation failed', { error: error.message });
     throw error;
+  } finally {
+    client.release();
   }
+}
+
+function groupPublishedContent(content) {
+  const topics = new Map();
+  for (const row of content) {
+    if (!topics.has(row.id)) {
+      topics.set(row.id, { id: row.id, name: row.name, skills: [] });
+    }
+    if (row.skill_id) {
+      topics.get(row.id).skills.push({
+        id: row.skill_id,
+        name: row.skill_name,
+        difficulty: row.difficulty_level
+      });
+    }
+  }
+  return [...topics.values()];
 }
 
 /**
@@ -66,7 +114,9 @@ export async function getLearningPath(pathId, learnerId) {
     );
     
     if (pathResult.rows.length === 0) {
-      throw new Error('Learning path not found');
+      const error = new Error('Learning path not found');
+      error.status = 404;
+      throw error;
     }
     
     const path = pathResult.rows[0];
@@ -77,10 +127,11 @@ export async function getLearningPath(pathId, learnerId) {
               COUNT(l.id) as lesson_count,
               COUNT(CASE WHEN p.status = 'completed' THEN 1 END) as completed_lessons
        FROM topics t
-       LEFT JOIN skills s ON t.id = s.topic_id
-       LEFT JOIN lessons l ON s.id = l.skill_id
+       LEFT JOIN skills s ON t.id = s.topic_id AND s.status = 'published'
+       LEFT JOIN lessons l ON s.id = l.skill_id AND l.status = 'published'
        LEFT JOIN progress p ON l.id = p.lesson_id AND p.learner_id = $1
        WHERE t.subject_id = $2
+         AND t.status = 'published'
        GROUP BY t.id, t.name, t.description
        ORDER BY t.id`,
       [learnerId, path.subject_id]
@@ -93,10 +144,35 @@ export async function getLearningPath(pathId, learnerId) {
        JOIN skills s ON l.skill_id = s.id
        JOIN topics t ON s.topic_id = t.id
        LEFT JOIN progress p ON l.id = p.lesson_id AND p.learner_id = $1
-       WHERE t.subject_id = $2 AND (p.id IS NULL OR p.status != 'completed')
-       ORDER BY t.id, s.difficulty_level
+       WHERE t.subject_id = $2
+         AND t.status = 'published'
+         AND s.status = 'published'
+         AND l.status = 'published'
+         AND (p.id IS NULL OR p.status != 'completed')
+       ORDER BY
+         CASE $3
+           WHEN 'LIKELY_MASTERED' THEN
+             CASE LOWER(COALESCE(l.difficulty_level, 'beginner'))
+               WHEN 'advanced' THEN 0 WHEN 'hard' THEN 0
+               WHEN 'intermediate' THEN 1 WHEN 'medium' THEN 1
+               ELSE 2
+             END
+           WHEN 'PRACTICING' THEN
+             CASE LOWER(COALESCE(l.difficulty_level, 'beginner'))
+               WHEN 'intermediate' THEN 0 WHEN 'medium' THEN 0
+               WHEN 'advanced' THEN 1 WHEN 'hard' THEN 1
+               ELSE 2
+             END
+           ELSE
+             CASE LOWER(COALESCE(l.difficulty_level, 'beginner'))
+               WHEN 'beginner' THEN 0 WHEN 'easy' THEN 0
+               WHEN 'intermediate' THEN 1 WHEN 'medium' THEN 1
+               ELSE 2
+             END
+         END,
+         t.id, s.difficulty_level, l.id
        LIMIT 1`,
-      [learnerId, path.subject_id]
+      [learnerId, path.subject_id, path.starting_level]
     );
     
     return {
@@ -108,40 +184,4 @@ export async function getLearningPath(pathId, learnerId) {
     logger.error('❌ Learning path fetch failed', { error: error.message });
     throw error;
   }
-}
-
-/**
- * Filter content based on learner level
- */
-function filterContentByLevel(content, level) {
-  const levelPriority = {
-    'NOT_ASSESSED': 0,
-    'INTRODUCED': 1,
-    'DEVELOPING': 2,
-    'PRACTICING': 3,
-    'LIKELY_MASTERED': 4
-  };
-  
-  // Start with topics below or at learner's current level
-  const filteredByTopic = {};
-  
-  content.forEach(row => {
-    if (!filteredByTopic[row.id]) {
-      filteredByTopic[row.id] = {
-        id: row.id,
-        name: row.name,
-        skills: []
-      };
-    }
-    
-    if (row.skill_id) {
-      filteredByTopic[row.id].skills.push({
-        id: row.skill_id,
-        name: row.skill_name,
-        difficulty: row.difficulty_level
-      });
-    }
-  });
-  
-  return Object.values(filteredByTopic);
 }

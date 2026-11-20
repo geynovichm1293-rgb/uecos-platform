@@ -383,6 +383,108 @@ async function seedDatabase() {
           );
         }
       }
+
+      // Seed a third starter slice for geometry and measurement.
+      const geometryTopic = await pool.query(
+        'SELECT id FROM topics WHERE subject_id = $1 AND name = $2 AND status = $3',
+        [mathSubjectId, 'Geometry Basics', 'published']
+      );
+      if (geometryTopic.rows.length > 0) {
+        const topicId = geometryTopic.rows[0].id;
+        let skill = await pool.query(
+          'SELECT id FROM skills WHERE topic_id = $1 AND name = $2 LIMIT 1',
+          [topicId, 'Shape Properties and Measurement']
+        );
+        if (skill.rows.length === 0) {
+          skill = await pool.query(
+            `INSERT INTO skills (topic_id, name, description, difficulty_level, status)
+             VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+            [topicId, 'Shape Properties and Measurement',
+              'Recognize common shapes, describe their properties, and calculate simple perimeter and area.',
+              'beginner', 'published']
+          );
+        }
+
+        const lessonContent = {
+          overview: 'Explore common two-dimensional shapes, angle facts, and the difference between perimeter and area.',
+          learningObjectives: [
+            'Identify common shapes and describe their sides, angles, and circle measurements',
+            'Use right-angle and triangle angle facts to classify shapes',
+            'Calculate the perimeter of squares and rectangles',
+            'Calculate the area of squares and rectangles using square units'
+          ],
+          sections: [
+            {
+              title: 'Describe shapes by their properties',
+              body: 'A polygon is a closed shape made from straight line segments. Triangles have three sides and quadrilaterals have four. A circle is a curved shape with a center, radius, and diameter.'
+            },
+            {
+              title: 'Understand angles',
+              body: 'A right angle measures 90 degrees. The interior angles of a triangle add to 180 degrees. An obtuse angle is greater than 90 degrees and less than 180 degrees.'
+            },
+            {
+              title: 'Perimeter measures the boundary',
+              body: 'Perimeter is the total distance around a two-dimensional shape. Add all side lengths. For a rectangle, use 2 × (length + width).'
+            },
+            {
+              title: 'Area measures the surface inside',
+              body: 'Area counts square units covering the inside of a shape. For a rectangle, multiply length by width. For a square, multiply the side length by itself.'
+            }
+          ],
+          workedExamples: [
+            {
+              prompt: 'Find the perimeter of a rectangle with length 5 cm and width 3 cm.',
+              solution: 'Add all four sides: 5 + 3 + 5 + 3 = 16 cm.'
+            },
+            {
+              prompt: 'Find the area of the same rectangle.',
+              solution: 'Multiply length by width: 5 × 3 = 15 square centimeters.'
+            }
+          ],
+          questions: [
+            { id: 'geo-01', prompt: 'How many sides does a triangle have?', correctAnswer: '3', explanation: 'A triangle is a polygon with exactly three straight sides and three angles.' },
+            { id: 'geo-02', prompt: 'How many sides does a square have?', correctAnswer: '4', explanation: 'A square is a quadrilateral, so it has four straight sides.' },
+            { id: 'geo-03', prompt: 'What is the name for the distance around a circle?', correctAnswer: 'circumference', explanation: 'The circumference is the distance around the boundary of a circle.' },
+            { id: 'geo-04', prompt: 'What is the name of a segment from the center of a circle to its edge?', correctAnswer: 'radius', explanation: 'A radius connects the center of a circle to a point on its circumference.' },
+            { id: 'geo-05', prompt: 'What is the name of a segment that crosses a circle through its center and touches both sides?', correctAnswer: 'diameter', explanation: 'The diameter passes through the center and equals two radii.' },
+            { id: 'geo-06', prompt: 'A circle has a diameter of 10 cm. What is its radius?', correctAnswer: '5', explanation: 'The radius is half the diameter: 10 ÷ 2 = 5 cm.' },
+            { id: 'geo-07', prompt: 'What is the measure of a right angle in degrees?', correctAnswer: '90', explanation: 'A right angle always measures exactly 90 degrees.' },
+            { id: 'geo-08', prompt: 'What is the sum of the interior angles of a triangle?', correctAnswer: '180', explanation: 'The three interior angles in every triangle add to 180 degrees.' },
+            { id: 'geo-09', prompt: 'A square has side length 4 cm. What is its perimeter?', correctAnswer: '16', explanation: 'A square has four equal sides. Its perimeter is 4 + 4 + 4 + 4 = 16 cm.' },
+            { id: 'geo-10', prompt: 'A rectangle is 5 cm long and 3 cm wide. What is its perimeter?', correctAnswer: '16', explanation: 'Add the four sides: 5 + 3 + 5 + 3 = 16 cm.' },
+            { id: 'geo-11', prompt: 'A rectangle is 5 cm long and 3 cm wide. What is its area in square centimeters?', correctAnswer: '15', explanation: 'Area equals length times width: 5 × 3 = 15 square centimeters.' },
+            { id: 'geo-12', prompt: 'A square has side length 6 cm. What is its area in square centimeters?', correctAnswer: '36', explanation: 'Area of a square is side length multiplied by itself: 6 × 6 = 36 square centimeters.' },
+            { id: 'geo-13', prompt: 'What do you call a triangle with three equal sides?', correctAnswer: 'equilateral', explanation: 'An equilateral triangle has three sides of equal length and three equal angles.' },
+            { id: 'geo-14', prompt: 'What do you call a triangle with exactly two equal sides?', correctAnswer: 'isosceles', explanation: 'An isosceles triangle has at least two sides of equal length.' },
+            { id: 'geo-15', prompt: 'What is an angle greater than 90 degrees but less than 180 degrees called?', correctAnswer: 'obtuse', explanation: 'An obtuse angle is wider than a right angle but smaller than a straight angle.' },
+            { id: 'geo-16', prompt: 'What is an angle smaller than 90 degrees called?', correctAnswer: 'acute', explanation: 'An acute angle measures more than 0 degrees and less than 90 degrees.' },
+            { id: 'geo-17', prompt: 'In the coordinate point (3, 2), what is the x-coordinate?', correctAnswer: '3', explanation: 'Coordinates are written (x, y). The first number is the x-coordinate.' },
+            { id: 'geo-18', prompt: 'A rectangle is 8 m long and 4 m wide. What is its area in square meters?', correctAnswer: '32', explanation: 'Multiply length by width: 8 × 4 = 32 square meters.' },
+            { id: 'geo-19', prompt: 'A rectangle is 8 m long and 4 m wide. What is its perimeter in meters?', correctAnswer: '24', explanation: 'Add all sides: 8 + 4 + 8 + 4 = 24 meters.' },
+            { id: 'geo-20', prompt: 'A rectangle has an area of 24 square centimeters and a width of 4 cm. What is its length?', correctAnswer: '6', explanation: 'Area equals length × width. Divide 24 by 4 to find the length: 6 cm.' }
+          ]
+        };
+        const qualityErrors = validateLessonForPublishing(lessonContent);
+        if (qualityErrors.length > 0) {
+          throw new Error(`Seed geometry lesson failed publishing quality checks: ${qualityErrors.join('; ')}`);
+        }
+
+        const existingLesson = await pool.query(
+          'SELECT id FROM lessons WHERE skill_id = $1 AND title = $2 LIMIT 1',
+          [skill.rows[0].id, 'Geometry: Shape Properties, Perimeter, and Area']
+        );
+        if (existingLesson.rows.length === 0) {
+          await pool.query(
+            `INSERT INTO lessons
+              (skill_id, title, description, content, duration_minutes, difficulty_level, status)
+             VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7)`,
+            [skill.rows[0].id,
+              'Geometry: Shape Properties, Perimeter, and Area',
+              'Recognize shapes and solve introductory geometry and measurement problems.',
+              JSON.stringify(lessonContent), 18, 'beginner', 'published']
+          );
+        }
+      }
     }
     
     logger.info('✅ Database seeding completed successfully');

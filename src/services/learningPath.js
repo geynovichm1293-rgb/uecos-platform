@@ -112,7 +112,9 @@ export async function getLearningPath(pathId, learnerId) {
     );
     
     if (pathResult.rows.length === 0) {
-      throw new Error('Learning path not found');
+      const error = new Error('Learning path not found');
+      error.status = 404;
+      throw error;
     }
     
     const path = pathResult.rows[0];
@@ -127,6 +129,7 @@ export async function getLearningPath(pathId, learnerId) {
        LEFT JOIN lessons l ON s.id = l.skill_id
        LEFT JOIN progress p ON l.id = p.lesson_id AND p.learner_id = $1
        WHERE t.subject_id = $2
+         AND t.status = 'published'
        GROUP BY t.id, t.name, t.description
        ORDER BY t.id`,
       [learnerId, path.subject_id]
@@ -139,7 +142,11 @@ export async function getLearningPath(pathId, learnerId) {
        JOIN skills s ON l.skill_id = s.id
        JOIN topics t ON s.topic_id = t.id
        LEFT JOIN progress p ON l.id = p.lesson_id AND p.learner_id = $1
-       WHERE t.subject_id = $2 AND (p.id IS NULL OR p.status != 'completed')
+       WHERE t.subject_id = $2
+         AND t.status = 'published'
+         AND s.status = 'published'
+         AND l.status = 'published'
+         AND (p.id IS NULL OR p.status != 'completed')
        ORDER BY t.id, s.difficulty_level
        LIMIT 1`,
       [learnerId, path.subject_id]

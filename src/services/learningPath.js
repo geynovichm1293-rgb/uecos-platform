@@ -7,49 +7,95 @@ import { determineStartingLevel } from './assessment.js';
  */
 export async function generateLearningPath(learnerId, subjectId, goalDescription, diagnosticScore = null) {
   const pool = getPool();
-  
+  const client = await pool.connect();
+
   try {
-    // Create learning path
-    const pathResult = await pool.query(
-      `INSERT INTO learning_paths (learner_id, subject_id, goal, status)
-       VALUES ($1, $2, $3, $4)
-       RETURNING *`,
-      [learnerId, subjectId, goalDescription, 'active']
-    );
-    
-    const path = pathResult.rows[0];
-    
-    // Get subject content hierarchy
-    const contentResult = await pool.query(
-      `SELECT t.id, t.name, s.id as skill_id, s.name as skill_name, s.difficulty_level
-       FROM topics t
-       LEFT JOIN skills s ON t.id = s.topic_id
-       WHERE t.subject_id = $1
-       ORDER BY t.id, s.difficulty_level`,
+    await client.query('BEGIN');
+
+    const subjectResult = await client.query(
+      `SELECT id FROM subjects WHERE id = $1 AND status = 'published' FOR SHARE`,
       [subjectId]
     );
-    
-    // Organize content by starting level
-    const startingLevel = diagnosticScore ? determineStartingLevel(diagnosticScore) : 'INTRODUCED';
-    const recommendedTopics = filterContentByLevel(contentResult.rows, startingLevel);
-    
-    logger.info('🎯 Learning path generated', {
+    if (subjectResult.rows.length === 0) {
+      const error = new Error('Published subject not found');
+      error.status = 404;
+      throw error;
+    }
+
+    // Keep one active path per learner and subject.
+    await client.query(
+      `UPDATE learning_paths
+       SET status = 'superseded', updated_at = CURRENT_TIMESTAMP
+       WHERE learner_id = $1 AND subject_id = $2 AND status = 'active'`,
+      [learnerId, subjectId]
+    );
+
+    const pathResult = await client.query(
+      `INSERT INTO learning_paths (learner_id, subject_id, goal, status)
+       VALUES ($1, $2, $3, 'active')
+       RETURNING *`,
+      [learnerId, subjectId, goalDescription]
+    );
+
+    const contentResult = await client.query(
+      `SELECT t.id, t.name, s.id as skill_id, s.name as skill_name, s.difficulty_level
+       FROM topics t
+       LEFT JOIN skills s
+         ON t.id = s.topic_id
+        AND s.status = 'published'
+       WHERE t.subject_id = $1
+         AND t.status = 'published'
+       ORDER BY t.id, s.difficulty_level, s.id`,
+      [subjectId]
+    );
+
+    await client.query('COMMIT');
+
+    const path = pathResult.rows[0];
+    const startingLevel = Number.isFinite(diagnosticScore)
+      ? determineStartingLevel(diagnosticScore)
+      : 'NOT_ASSESSED';
+    const recommendedTopics = groupPublishedContent(contentResult.rows);
+
+    logger.info('Learning path generated', {
       pathId: path.id,
       learnerId,
       topicCount: recommendedTopics.length,
       startingLevel
     });
-    
+
     return {
       path,
       topics: recommendedTopics,
       startingLevel,
-      totalTopics: contentResult.rows.length
+      totalTopics: recommendedTopics.length
     };
   } catch (error) {
-    logger.error('❌ Learning path generation failed', { error: error.message });
+    try { await client.query('ROLLBACK'); } catch (rollbackError) {
+      logger.error('Learning path rollback failed', { error: rollbackError.message });
+    }
+    logger.error('Learning path generation failed', { error: error.message });
     throw error;
+  } finally {
+    client.release();
   }
+}
+
+function groupPublishedContent(content) {
+  const topics = new Map();
+  for (const row of content) {
+    if (!topics.has(row.id)) {
+      topics.set(row.id, { id: row.id, name: row.name, skills: [] });
+    }
+    if (row.skill_id) {
+      topics.get(row.id).skills.push({
+        id: row.skill_id,
+        name: row.skill_name,
+        difficulty: row.difficulty_level
+      });
+    }
+  }
+  return [...topics.values()];
 }
 
 /**

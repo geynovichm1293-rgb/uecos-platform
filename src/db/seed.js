@@ -71,12 +71,17 @@ async function seedDatabase() {
       const mathSubjectId = mathSubject.rows[0].id;
       
       for (const topicName of mathTopics) {
-        await pool.query(
-          `INSERT INTO topics (subject_id, name, description, status)
-           VALUES ($1, $2, $3, $4)
-           ON CONFLICT DO NOTHING`,
-          [mathSubjectId, topicName, `Learn about ${topicName}`, 'published']
+        const existingTopic = await pool.query(
+          'SELECT id FROM topics WHERE subject_id = $1 AND name = $2 LIMIT 1',
+          [mathSubjectId, topicName]
         );
+        if (existingTopic.rows.length === 0) {
+          await pool.query(
+            `INSERT INTO topics (subject_id, name, description, status)
+             VALUES ($1, $2, $3, $4)`,
+            [mathSubjectId, topicName, `Learn about ${topicName}`, 'published']
+          );
+        }
       }
       logger.info('✅ Sample topics created');
 

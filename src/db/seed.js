@@ -167,6 +167,96 @@ async function seedDatabase() {
               prompt: 'Which number makes this subtraction true: 18 - ? = 11?',
               correctAnswer: '7',
               explanation: 'The difference between 18 and 11 is 7. Check: 18 - 7 = 11.'
+            },
+            {
+              id: 'arith-add-06',
+              prompt: 'Calculate 23 + 14.',
+              correctAnswer: '37',
+              explanation: 'Add tens and ones: 20 + 10 = 30, and 3 + 4 = 7. Then 30 + 7 = 37.'
+            },
+            {
+              id: 'arith-add-07',
+              prompt: 'Find the missing addend: 38 + ? = 52.',
+              correctAnswer: '14',
+              explanation: 'Subtract the known addend from the total: 52 - 38 = 14.'
+            },
+            {
+              id: 'arith-add-08',
+              prompt: 'Calculate 46 + 27.',
+              correctAnswer: '73',
+              explanation: 'Add ones: 6 + 7 = 13, regroup 10 ones as 1 ten, then add tens: 4 + 2 + 1 = 7 tens. The total is 73.'
+            },
+            {
+              id: 'arith-add-09',
+              prompt: 'A school collected 125 cans on Monday and 38 cans on Tuesday. How many cans did it collect altogether?',
+              correctAnswer: '163',
+              explanation: 'The amounts are combined: 125 + 38 = 163 cans.'
+            },
+            {
+              id: 'arith-sub-10',
+              prompt: 'Calculate 32 - 17.',
+              correctAnswer: '15',
+              explanation: 'Subtract 10 to get 22, then subtract 7 to get 15.'
+            },
+            {
+              id: 'arith-sub-11',
+              prompt: 'Calculate 50 - 28.',
+              correctAnswer: '22',
+              explanation: 'Subtract 20 to get 30, then subtract 8 to get 22.'
+            },
+            {
+              id: 'arith-sub-12',
+              prompt: 'Calculate 81 - 36.',
+              correctAnswer: '45',
+              explanation: 'Subtract 30 to get 51, then subtract 6 to get 45.'
+            },
+            {
+              id: 'arith-sub-13',
+              prompt: 'A class needs 100 sheets of paper. It has already used 64. How many sheets remain?',
+              correctAnswer: '36',
+              explanation: 'The remaining amount is 100 - 64 = 36 sheets.'
+            },
+            {
+              id: 'arith-word-14',
+              prompt: 'A bus has 26 passengers. At the next stop, 18 more passengers board. How many passengers are on the bus now?',
+              correctAnswer: '44',
+              explanation: 'More passengers board, so add 26 + 18 = 44 passengers.'
+            },
+            {
+              id: 'arith-word-15',
+              prompt: 'Jordan has 45 stickers and gives 19 away. How many stickers does Jordan have left?',
+              correctAnswer: '26',
+              explanation: 'Giving stickers away reduces the amount: 45 - 19 = 26 stickers.'
+            },
+            {
+              id: 'arith-missing-16',
+              prompt: 'Find the missing number: ? + 18 = 40.',
+              correctAnswer: '22',
+              explanation: 'Use the inverse operation: 40 - 18 = 22.'
+            },
+            {
+              id: 'arith-missing-17',
+              prompt: 'Find the missing number: 63 - ? = 28.',
+              correctAnswer: '35',
+              explanation: 'The missing amount is the difference between 63 and 28: 63 - 28 = 35.'
+            },
+            {
+              id: 'arith-reason-18',
+              prompt: 'A learner says 52 - 18 = 44. What is the correct difference?',
+              correctAnswer: '34',
+              explanation: '52 - 20 = 32, then add back 2 because only 18 was subtracted. The correct difference is 34.'
+            },
+            {
+              id: 'arith-place-19',
+              prompt: 'What number is made by 3 tens and 4 ones?',
+              correctAnswer: '34',
+              explanation: 'Three tens equal 30 and four ones equal 4. Together they make 34.'
+            },
+            {
+              id: 'arith-check-20',
+              prompt: 'Which number sentence checks that 47 - 19 = 28?',
+              acceptedAnswers: ['28 + 19 = 47', '19 + 28 = 47'],
+              explanation: 'Addition checks subtraction. Adding the difference, 28, to the amount taken away, 19, returns the starting number 47.'
             }
           ]
         };

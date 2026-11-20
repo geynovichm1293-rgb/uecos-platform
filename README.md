@@ -82,7 +82,7 @@ uecos-platform/
 ## Getting Started
 
 ### Prerequisites
-- Node.js 18+
+- Node.js 22+
 - PostgreSQL 12+
 - npm or yarn
 

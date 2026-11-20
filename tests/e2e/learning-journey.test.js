@@ -6,9 +6,11 @@
 
 import assert from 'assert';
 import axios from 'axios';
+import pg from 'pg';
 
 const API_BASE = process.env.API_BASE || 'http://localhost:3000';
 const client = axios.create({ baseURL: API_BASE });
+const testPool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
 
 let testUser = {
   email: `test-${Date.now()}@example.com`,
@@ -22,6 +24,7 @@ let userId = null;
 let subjectId = null;
 let topicId = null;
 let assessmentId = null;
+let lessonId = null;
 
 const test = await import('node:test');
 
@@ -87,6 +90,60 @@ test.describe('E2E: Complete Learning Journey', () => {
     
     assert.strictEqual(response.status, 201, 'Goal creation should return 201');
     assert.ok(response.data.path.id, 'Should create learning path');
+
+    // Create a published lesson fixture so the learner lesson endpoints are exercised.
+    const skill = await testPool.query(
+      `INSERT INTO skills (topic_id, name, difficulty_level, status)
+       VALUES ($1, $2, $3, $4) RETURNING id`,
+      [topicId, 'E2E lesson access skill', 'beginner', 'published']
+    );
+    const lesson = await testPool.query(
+      `INSERT INTO lessons (skill_id, title, description, content, duration_minutes, status)
+       VALUES ($1, $2, $3, $4::jsonb, $5, $6) RETURNING id`,
+      [skill.rows[0].id, 'E2E lesson access test', 'Test lesson', JSON.stringify({
+        questions: [{ id: 101, prompt: 'What is 2 + 2?', correctAnswer: '4', explanation: 'Add two and two.' }]
+      }), 5, 'published']
+    );
+    lessonId = lesson.rows[0].id;
+  });
+
+  test.it('Step 4b: Learner can load and answer a lesson in their active path', async () => {
+    const lesson = await client.get(`/api/learner/lesson/${lessonId}`);
+    assert.equal(lesson.status, 200);
+    assert.equal(lesson.data.content.questions[0].correctAnswer, undefined);
+
+    const answer = await client.post(`/api/learner/lesson/${lessonId}/answer`, {
+      questionId: 101,
+      answer: '4'
+    });
+    assert.equal(answer.status, 200);
+    assert.equal(answer.data.feedback.isCorrect, true);
+
+    const completed = await client.post(`/api/learner/lesson/${lessonId}/complete`);
+    assert.equal(completed.status, 200);
+    assert.equal(completed.data.status, 'completed');
+  });
+
+  test.it('Step 4c: A different learner cannot load, answer, or complete that lesson', async () => {
+    const otherEmail = `other-${Date.now()}@example.com`;
+    await client.post('/api/auth/register', { email: otherEmail, password: 'OtherPassword123!' });
+    const otherLogin = await client.post('/api/auth/login', { email: otherEmail, password: 'OtherPassword123!' });
+    client.defaults.headers.common['Authorization'] = `Bearer ${otherLogin.data.token}`;
+
+    for (const action of [
+      () => client.get(`/api/learner/lesson/${lessonId}`),
+      () => client.post(`/api/learner/lesson/${lessonId}/answer`, { questionId: 101, answer: '4' }),
+      () => client.post(`/api/learner/lesson/${lessonId}/complete`)
+    ]) {
+      try {
+        await action();
+        assert.fail('A learner without an active path must not access this lesson');
+      } catch (error) {
+        assert.equal(error.response.status, 404);
+      }
+    }
+
+    client.defaults.headers.common['Authorization'] = `Bearer ${authToken}`;
   });
   
   test.it('Step 5: User views learning path', async () => {
@@ -161,4 +218,9 @@ test.describe('E2E: Complete Learning Journey', () => {
       assert.strictEqual(error.response.status, 401, 'Should return 401 Unauthorized');
     }
   });
+});
+
+
+test.after(async () => {
+  await testPool.end();
 });

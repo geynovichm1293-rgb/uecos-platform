@@ -174,6 +174,13 @@ test.describe('E2E: Complete Learning Journey', () => {
       }
     }
 
+    try {
+      await client.post('/api/learner/assessment/diagnostic', { topicId });
+      assert.fail('A learner without an active path must not start a diagnostic');
+    } catch (error) {
+      assert.equal(error.response.status, 409);
+    }
+
     client.defaults.headers.common['Authorization'] = `Bearer ${authToken}`;
   });
   

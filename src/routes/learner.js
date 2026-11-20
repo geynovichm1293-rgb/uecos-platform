@@ -199,13 +199,54 @@ router.post('/assessment/diagnostic', authenticate, validate('diagnostic'), asyn
   
   logger.info('📋 Diagnostic assessment started', { learnerId, topicId });
   
-  // Create sample diagnostic questions
-  const diagnosticQuestions = [
-    { id: 1, text: 'What is 2 + 2?', correctAnswer: '4', explanation: '2 + 2 equals 4.' },
-    { id: 2, text: 'What is half of 10?', correctAnswer: '5', explanation: 'Half means divide by 2; 10 divided by 2 equals 5.' }
-  ];
-  
-  const assessment = await createDiagnosticAssessment(learnerId, topicId, diagnosticQuestions);
+  // Build diagnostics from real, published lesson questions in the learner's active path.
+  const pool = getPool();
+  const lessonRows = await pool.query(
+    `SELECT l.id AS lesson_id, l.content
+     FROM lessons l
+     JOIN skills s ON s.id = l.skill_id
+     JOIN topics t ON t.id = s.topic_id
+     JOIN learning_paths lp
+       ON lp.subject_id = t.subject_id
+      AND lp.learner_id = $1
+      AND lp.status = 'active'
+     WHERE t.id = $2
+       AND t.status = 'published'
+       AND s.status = 'published'
+       AND l.status = 'published'
+     ORDER BY l.id`,
+    [learnerId, topicId]
+  );
+
+  const diagnosticQuestions = [];
+  for (const row of lessonRows.rows) {
+    const content = typeof row.content === 'string' ? JSON.parse(row.content) : row.content;
+    for (const question of (Array.isArray(content?.questions) ? content.questions : [])) {
+      const answerKey = question.correctAnswer ?? question.correctOptionId ?? question.answerKey;
+      const acceptedAnswers = Array.isArray(question.acceptedAnswers) ? question.acceptedAnswers : [answerKey];
+      if (question.id === undefined || acceptedAnswers.length === 0 ||
+          acceptedAnswers.some(value => value === undefined || value === null || String(value).trim() === '')) {
+        continue;
+      }
+      diagnosticQuestions.push({
+        ...question,
+        id: `${row.lesson_id}:${question.id}`,
+        prompt: question.prompt ?? question.text
+      });
+    }
+  }
+
+  if (diagnosticQuestions.length < 5) {
+    return res.status(409).json({
+      error: 'This topic does not have enough published diagnostic questions yet'
+    });
+  }
+
+  const assessment = await createDiagnosticAssessment(
+    learnerId,
+    topicId,
+    diagnosticQuestions.slice(0, 10)
+  );
   
   res.status(201).json({
     assessmentId: assessment.id,

@@ -25,6 +25,7 @@ let subjectId = null;
 let topicId = null;
 let assessmentId = null;
 let lessonId = null;
+let pathId = null;
 
 const test = await import('node:test');
 
@@ -91,6 +92,7 @@ test.describe('E2E: Complete Learning Journey', () => {
     
     assert.strictEqual(response.status, 201, 'Goal creation should return 201');
     assert.ok(response.data.path.id, 'Should create learning path');
+    pathId = response.data.path.id;
 
     // Create a published lesson fixture so the learner lesson endpoints are exercised.
     const skill = await testPool.query(
@@ -147,6 +149,37 @@ test.describe('E2E: Complete Learning Journey', () => {
     client.defaults.headers.common['Authorization'] = `Bearer ${authToken}`;
   });
   
+  test.it('Step 4d: A learner has only one active path per subject', async () => {
+    const response = await client.post('/api/learner/goal', {
+      subjectId,
+      goalDescription: 'Refresh my basic math learning path'
+    });
+    assert.equal(response.status, 201);
+    assert.notEqual(response.data.path.id, pathId);
+
+    const paths = await testPool.query(
+      `SELECT id, status FROM learning_paths
+       WHERE learner_id = (SELECT id FROM learners WHERE user_id = $1)
+         AND subject_id = $2
+       ORDER BY id`,
+      [userId, subjectId]
+    );
+    assert.equal(paths.rows.filter(path => path.status === 'active').length, 1);
+    assert.equal(paths.rows.find(path => path.id === pathId).status, 'superseded');
+  });
+
+  test.it('Step 4e: A learner cannot create a path for an unpublished or missing subject', async () => {
+    try {
+      await client.post('/api/learner/goal', {
+        subjectId: 99999999,
+        goalDescription: 'Invalid subject test'
+      });
+      assert.fail('A missing subject must not create a learning path');
+    } catch (error) {
+      assert.equal(error.response.status, 404);
+    }
+  });
+
   test.it('Step 5: User views learning path', async () => {
     // This would use the pathId from step 4
     const response = await client.get('/api/learner/progress');

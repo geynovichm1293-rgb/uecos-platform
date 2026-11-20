@@ -55,6 +55,19 @@ export async function submitAssessment(assessmentId, learnerId, responses) {
       throw error;
     }
 
+    // Persist the diagnostic result on the learner's active path for this subject.
+    const startingLevel = determineStartingLevel(graded.score);
+    await client.query(
+      `UPDATE learning_paths lp
+       SET starting_level = $1, updated_at = CURRENT_TIMESTAMP
+       FROM topics t
+       WHERE lp.learner_id = $2
+         AND lp.subject_id = t.subject_id
+         AND t.id = $3
+         AND lp.status = 'active'`,
+      [startingLevel, learnerId, updated.rows[0].topic_id]
+    );
+
     await client.query('COMMIT');
     logger.info('Assessment submitted and graded', { assessmentId, learnerId, score: graded.score });
     return updated.rows[0];
